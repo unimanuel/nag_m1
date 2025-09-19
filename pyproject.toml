@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "nag"
+version = "0.1.0"
+description = ""
+authors = [
+    "Jan Philipp Schneider <jp-schneider@users.noreply.github.com>",
+    "Pratik Singh Bisht",
+    "Ilya Chugunov",
+    "Andreas Kolb",
+    "Michael Moeller",
+    "Felix Heide",
+]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
