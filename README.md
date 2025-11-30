@@ -5,7 +5,7 @@
     <p style="font-size: 1.1em; color: #34495e; margin-top: 15px; margin-bottom: 5px;">
         <a href="https://github.com/jp-schneider" style="color: #34495e; text-decoration: none;"><strong>Jan Philipp Schneider</strong></a><sup>1,2</sup>,
         <a href="./README.md" style="color: #34495e; text-decoration: none;"><strong>Pratik Singh Bisht</strong></a><sup>1</sup>,
-        <a href="https://ilyac.info/" style="color: #34495e; text-decoration: none;"><strong>Ilya Chugunov</strong></a><sup>2</sup>,<br>
+        <a href="https://ilyac.info/" style="color: #34495e; text-decoration: none;"><strong>Ilya Chugunov</strong></a><sup>2</sup>,
         <a href="https://www.cg.informatik.uni-siegen.de/de/kolb-andreas" style="color: #34495e; text-decoration: none;"><strong>Andreas Kolb</strong></a><sup>1</sup>,
         <a href="https://sites.google.com/site/michaelmoellermath/" style="color: #34495e; text-decoration: none;"><strong>Michael Moeller</strong></a><sup>1,3</sup>,
         <a href="https://www.cs.princeton.edu/~fheide/" style="color: #34495e; text-decoration: none;"><strong>Felix Heide</strong></a><sup>2,4</sup>
@@ -39,10 +39,10 @@
 
 </p>
 <p align="center">
-    <h3>"Neural Atlas Graphs enable high-quality dynamic scene decomposition and intuitive 2D appearance editing, with use-cases in autonomous driving and videography."
+    <h3 align="center">"Neural Atlas Graphs enable high-quality dynamic scene decomposition and intuitive 2D appearance editing, with use-cases in autonomous driving and videography."
     </h3>
 </p>
-
+<br>
 <div style="margin: 0 auto; padding: 0px;">
     <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <tbody>
@@ -64,9 +64,9 @@
             </tr>
         </tbody>
     </table>
-    <h4 align="left">Dynamic Scene Editing in Waymo S-203. Ground Truth (top) vs. NAG Edits (bottom) across four frames. The final column shows the texture source (top) and removed object mask (bottom). Note the realistic, consistent blending of the foreground car and its shadow into the edited scene.</h4>
+    <h5 align="left">Dynamic Scene Editing in Waymo S-203. Ground Truth (top) vs. NAG Edits (bottom) across four frames. The final column shows the texture source (top) and removed object mask (bottom). Note the realistic, consistent blending of the foreground car and its shadow into the edited scene.</h5>
 </div>
-
+<br>
 <div style="margin: 0 auto; padding: 0px;">
     <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <tbody>
@@ -90,9 +90,10 @@
             </tr>
         </tbody>
     </table>
-    <h4 align="left"><bold>Seamless Texture Transfer and Propagation. We utilize image generation models to create new textures for the black swan (White and Rainbow variants). The NAG effectively projects these textures (bottom rows) onto the dynamic 3D object, ensuring robust temporal coherence throughout the sequence.</h4>
+    <h5 align="left"><bold>Seamless Texture Transfer and Propagation. We utilize image generation models to create new textures for the black swan (White and Rainbow variants). The NAG effectively projects these textures (bottom rows) onto the dynamic 3D object, ensuring robust temporal coherence throughout the sequence.</h5>
 </div>
-
+        
+-----    
 This repository contains the official implementation of **Neural Atlas Graphs for Dynamic Scene Decomposition and Editing**, a novel hybrid scene representation for learning editable high-resolution dynamic scenes. Neural Atlas Graphs (NAG) integrate the editability of neural atlases with the complex spatial reasoning of scene graphs, where each graph node is a view-dependent neural atlas. This allows for both intuitive 2D appearance editing and consistent 3D ordering and positioning of scene elements.
 
 ## 🛠️ Installation
