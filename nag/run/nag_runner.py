@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import numpy as np
@@ -1083,7 +1084,7 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
 
     def train(self) -> None:
         try:
-            set_default_output_dir(self.config.output_path / "viz")
+            set_default_output_dir(Path(str(self.config.output_path)) / "viz")
             # Model manually to device
             self.model.train()
             if isinstance(self.grid_sampler._sampler, RandomTimedUVGridSampler):

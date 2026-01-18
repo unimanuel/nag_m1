@@ -1436,7 +1436,9 @@ class NAGCallback(pl.Callback):
         trainer.save_checkpoint(cpath)
 
     def save_tracker(self, path: str = "tracker"):
-        tracker_dir = os.path.join(self.config.output_path, path)
+        if not self.config.save_tracker:
+            return
+        tracker_dir = os.path.join(str(self.config.output_path), path)
         self.runner.tracker.save_to_directory(tracker_dir)
 
     def save_config(self, model: NAGModel):

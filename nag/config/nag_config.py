@@ -484,6 +484,9 @@ class NAGConfig(ExperimentOutputConfig, EnvConfigMixin):
     debug: bool = field(default=False)
     """If the debug mode should be enabled. If True, will set the fast_dev_run flag of the Trainer to True."""
 
+    save_tracker: bool = field(default=True)
+    """If tracker metrics should be saved to disk during training."""
+
     in_training_checkpoint_interval: Optional[int] = field(default=None)
     """Describes when it will save a checkpoint. current_epoch modulo in_training_checkpoint_interval == 0"""
 
