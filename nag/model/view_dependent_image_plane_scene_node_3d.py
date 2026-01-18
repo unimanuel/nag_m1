@@ -531,6 +531,7 @@ class ViewDependentImagePlaneSceneNode3D(
 
             if is_inside is not None:
                 query_points = query_points[is_inside.reshape(B * T)]
+                query_points_alpha = query_points_alpha[is_inside.reshape(B * T)]
                 view_rgb = view_rgb[is_inside.reshape(B * T)]
                 view_alpha = view_alpha[is_inside.reshape(B * T)]
 
