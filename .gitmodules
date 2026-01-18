@@ -1,4 +1,4 @@
 [submodule "tools"]
 	path = tools
-	url = https://github.com/jp-schneider/tools.git
+	url = https://github.com/unimanuel/tools_m1
 	branch = nag

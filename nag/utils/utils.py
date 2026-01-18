@@ -868,8 +868,26 @@ def write_mp4(frames: np.ndarray,
 
     frames = ((frames - frames.min()) / frames.max() * 255).astype(np.uint8)
 
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
-    video = cv2.VideoWriter(path, fourcc, fps, (width, height))
+    import logging
+    from tools.video.writer import Writer
+    candidates = Writer._codec_candidates()
+    video = None
+    for candidate in candidates:
+        fourcc = cv2.VideoWriter_fourcc(*candidate)
+        video = cv2.VideoWriter(path, fourcc, fps, (width, height))
+        if video.isOpened():
+            if candidate != candidates[0]:
+                logging.warning(
+                    "Video codec '%s' unavailable, falling back to '%s'.",
+                    candidates[0],
+                    candidate,
+                )
+            break
+        video.release()
+        video = None
+    if video is None:
+        raise RuntimeError(
+            f"Could not open VideoWriter. Tried codecs: {', '.join(candidates)}.")
 
     bar = None
     if progress_bar:

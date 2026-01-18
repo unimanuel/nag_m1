@@ -231,3 +231,4 @@ runs
 .launch/*
 log/*
 !data/static/
+.vscode/settings.json

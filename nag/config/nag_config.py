@@ -129,7 +129,7 @@ def default_background_plane_kwargs(size: str = "large") -> Dict[str, Any]:
     )
 
 @dataclass
-class NAGConfig(ExperimentOutputConfig, EnvConfigMixin):
+class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     """Configuration for the NAGModel."""
 
     # region Paths and stuff

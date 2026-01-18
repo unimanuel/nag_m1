@@ -61,7 +61,7 @@ NAGConfig:
     - nag.loss.ssim.SSIM
   final_modalities_save: false
   final_per_object_save: false
-  final_plot_resolution_factor: 1
+  final_plot_resolution_factor: 0.5
   final_plot_without_view_dependency: true
   frame_indices_filter:
     __class__: slice
@@ -97,7 +97,7 @@ NAGConfig:
   is_plane_translation_learnable: true
   is_waymo: false
   jit_enabled: true
-  learn_resolution_factor: 1
+  learn_resolution_factor: 0.5
   log_every_n_steps: 1
   log_gradient: false
   loss_kwargs:
@@ -113,7 +113,7 @@ NAGConfig:
   masks_path: "{data_path}/masks"
   max_epochs: 80
   max_image_size: 2040
-  max_total_batch_size: 20000000.0
+  max_total_batch_size: 450000.0
   max_total_batch_size_inference: 40000000.0
   model_type: nag.model.nag_functional_model.NAGFunctionalModel
   name: W141_53_101_small-undistorted

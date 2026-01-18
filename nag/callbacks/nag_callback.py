@@ -254,7 +254,7 @@ def calculate_metrics(
                     outputs_scaled = torch.zeros(
                         len(indices), H, W, C, device=outputs.device, dtype=outputs.dtype)
                 outputs_scaled[ti] = resize_output(
-                    outputs[i].permute(2, 0, 1)).permute(1, 2, 0)
+                    outputs[ti].permute(2, 0, 1)).permute(1, 2, 0)
 
         if targets is None:
             targets = torch.zeros(
@@ -311,7 +311,7 @@ def calculate_mask_metrics(
                 resize_target = Resize((HO, WO))
             if H < HO or W < WO:
                 target = resize_target(target).permute(2, 0, 1)
-                mask = resize_target(mask.float()).permute(2, 0, 1).bool()
+                mask = resize_target(mask.float()).bool()
 
             if resize_output is None and H > HO or W > WO:
                 logging.info(
@@ -319,11 +319,12 @@ def calculate_mask_metrics(
                 resize_output = Resize((H, W))
 
             if H > HO or W > WO:
+                mask = resize_output(mask.float()).bool()
                 if outputs_scaled is None:
                     outputs_scaled = torch.zeros(
                         len(indices), H, W, C, device=outputs.device, dtype=outputs.dtype)
                 outputs_scaled[ti] = resize_output(
-                    outputs[i].permute(2, 0, 1)).permute(1, 2, 0)
+                    outputs[ti].permute(2, 0, 1)).permute(1, 2, 0)
 
         if targets is None:
             targets = torch.zeros(
@@ -1150,7 +1151,7 @@ class NAGCallback(pl.Callback):
                         if k not in merged_results:
                             merged_results[k] = []
                         merged_results[k].append(v)
-                merged_results = {k: tocalculate_mask_metrics_from_pathsrch.cat(v, dim=0)
+                merged_results = {k: torch.cat(v, dim=0)
                                   for k, v in merged_results.items()}
 
                 mask_ids = self.runner.dataset.mask_ids

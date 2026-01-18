@@ -27,7 +27,7 @@ NAGConfig:
   camera_translation_offset_weight: 0.5
   checkpoint_path: null
   checkpoint_tracker_path: null
-  coarse_to_fine_end_epoch: 65
+  coarse_to_fine_end_epoch: 7
   coarse_to_fine_start_epoch: 0
   data_path: "{env:DATA_PATH}/waymo/segment-14133920963894906769"
   debug: false
@@ -59,7 +59,7 @@ NAGConfig:
     - tools.metric.torch.psnr.PSNR
     - nag.loss.ssim.SSIM
   final_modalities_save: true
-  final_plot_resolution_factor: 1
+  final_plot_resolution_factor: 0.5
   final_plot_without_view_dependency: true
   frame_indices_filter:
     __class__: slice
@@ -100,7 +100,7 @@ NAGConfig:
   is_plane_translation_learnable: true
   is_waymo: false
   jit_enabled: true
-  learn_resolution_factor: 1
+  learn_resolution_factor: 0.5
   log_every_n_steps: 1
   log_gradient: false
   loss_kwargs:
@@ -114,9 +114,9 @@ NAGConfig:
   mask_indices_filter: null
   masks_filename_pattern: img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png
   masks_path: "{data_path}/masks"
-  max_epochs: 80
+  max_epochs: 10
   max_image_size: 2040
-  max_total_batch_size: 20000000.0
+  max_total_batch_size: 450000.0
   max_total_batch_size_inference: 40000000.0
   model_type: nag.model.nag_functional_model.NAGFunctionalModel
   name: W141_2_53_large-undistorted

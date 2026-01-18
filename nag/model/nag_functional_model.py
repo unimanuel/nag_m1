@@ -1400,7 +1400,7 @@ class NAGFunctionalModel(NAGModel):
                 "Camera index is not the last index in translations.")
         CIDX = enabled_objects_cam.sum() - 1
 
-        global_positions, local_plane_scale, local_plane_scale_offset = self._assemble_object_rigid_data(
+        global_positions, local_plane_scale, local_plane_scale_offset, CIDX = self._assemble_object_rigid_data(
             t, enabled_objects, enabled_background)
 
         global_ray_origins, global_ray_directions, _, OB_mask, intersection_points, is_inside, _, _ = plane_hits(
