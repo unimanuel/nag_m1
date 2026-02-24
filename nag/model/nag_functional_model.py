@@ -33,6 +33,7 @@ from tools.context.temporary_training import TemporaryTraining
 from tools.util.typing import VEC_TYPE, NUMERICAL_TYPE, DEFAULT, _DEFAULT
 from tools.util.torch import batched_generator_exec, flatten_batch_dims, unflatten_batch_dims
 from nag.model.learned_aberration_plane_scene_node_3d import LearnedAberrationPlaneSceneNode3D
+from nag.model.sphere_utils import ray_sphere_intersection, normalize
 from tools.util.sized_generator import SizedGenerator
 from tools.transforms.geometric.quaternion import quat_subtraction
 from tools.util.torch import TensorUtil
@@ -723,6 +724,38 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale_offset=local_plane_scale_offset,
         )
 
+        # ------------------------------------------------------------------
+        # Spherical background override
+        # ------------------------------------------------------------------
+        # Intersection is computed as ray-plane for all nodes in the JIT path.
+        # If the configured background is spherical, overwrite the background
+        # entry with an actual ray-sphere intersection (camera and objects are
+        # expected to be inside the sphere).
+        if has_background and getattr(objects[self.background_idx], "is_spherical_background", False):
+            bg_i = int(self.background_idx)
+            bg_T = global_positions[OB_mask][bg_i]  # (T,4,4)
+            center_T = bg_T[:, :3, 3]  # (T,3)
+            center_BT = center_T.unsqueeze(0)  # (1,T,3) broadcast over B
+
+            bg_obj = objects[bg_i]
+            radius = bg_obj.get_sphere_radius() if hasattr(bg_obj, "get_sphere_radius") else getattr(bg_obj, "sphere_radius")
+            radius = tensorify(radius, dtype=uv.dtype, device=uv.device)
+
+            pts_BT, hit_BT, _t_BT = ray_sphere_intersection(
+                ray_origins=global_ray_origins,
+                ray_directions=global_ray_directions,
+                center=center_BT.to(uv.dtype),
+                radius=radius,
+            )
+
+            intersection_points[bg_i] = pts_BT
+            is_inside[bg_i] = hit_BT
+
+            # Provide per-ray reference points/normals for gradient hooks.
+            if plane_p is not None and plane_n is not None:
+                plane_p[bg_i] = center_BT.expand_as(pts_BT)
+                plane_n[bg_i] = normalize(pts_BT - plane_p[bg_i])
+
         global_plane_positions = global_positions[OB_mask]
 
         colors = torch.zeros(
@@ -1298,6 +1331,24 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale_offset=local_plane_scale_offset,
         )
 
+        # Spherical background override (object_specific_forward)
+        bg_i = next((i for i, o in enumerate(objects) if getattr(o, "is_spherical_background", False)), None)
+        if bg_i is not None:
+            bg_T = global_positions[OB_mask][bg_i]
+            center_T = bg_T[:, :3, 3]
+            center_BT = center_T.unsqueeze(0)
+            bg_obj = objects[bg_i]
+            radius = bg_obj.get_sphere_radius() if hasattr(bg_obj, "get_sphere_radius") else getattr(bg_obj, "sphere_radius")
+            radius = tensorify(radius, dtype=uv.dtype, device=uv.device)
+            pts_BT, hit_BT, _ = ray_sphere_intersection(
+                ray_origins=global_ray_origins,
+                ray_directions=global_ray_directions,
+                center=center_BT.to(uv.dtype),
+                radius=radius,
+            )
+            intersection_points[bg_i] = pts_BT
+            is_inside[bg_i] = hit_BT
+
         global_plane_positions = global_positions[OB_mask]
 
         colors = torch.zeros(
@@ -1413,6 +1464,24 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale=local_plane_scale,
             local_plane_scale_offset=local_plane_scale_offset,
         )
+
+        # Spherical background override (modality_forward)
+        bg_i = next((i for i, o in enumerate(objects) if getattr(o, "is_spherical_background", False)), None)
+        if bg_i is not None:
+            bg_T = global_positions[OB_mask][bg_i]
+            center_T = bg_T[:, :3, 3]
+            center_BT = center_T.unsqueeze(0)
+            bg_obj = objects[bg_i]
+            radius = bg_obj.get_sphere_radius() if hasattr(bg_obj, "get_sphere_radius") else getattr(bg_obj, "sphere_radius")
+            radius = tensorify(radius, dtype=uv.dtype, device=uv.device)
+            pts_BT, hit_BT, _ = ray_sphere_intersection(
+                ray_origins=global_ray_origins,
+                ray_directions=global_ray_directions,
+                center=center_BT.to(uv.dtype),
+                radius=radius,
+            )
+            intersection_points[bg_i] = pts_BT
+            is_inside[bg_i] = hit_BT
 
         global_plane_positions = global_positions[OB_mask]
 

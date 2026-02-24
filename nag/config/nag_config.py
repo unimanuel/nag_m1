@@ -313,10 +313,15 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     has_camera_aberration_plane: bool = field(default=False)
     """If a lens aberration plane should be added to the scene. Has a learned color and its position is fixed to the camera."""
 
-    background_plane_type: Union[str, Type, _DEFAULT] = field(default="nag.model.view_dependent_background_image_plane_scene_node_3d.ViewDependentBackgroundImagePlaneSceneNode3D")
+    background_plane_type: Union[str, Type, _DEFAULT] = field(default="nag.model.view_dependent_background_image_sphere_scene_node_3d.ViewDependentBackgroundImageSphereSceneNode3D")
     """Type of the background plane. Can be a type or a string which is a valid path to a class.
     If DEFAULT, calculates wether the masks cover the whole image () and sets the background plane to a fixed color if so,
-    if not it will be the BackgroundImagePlaneSceneNode3D."""
+    if not it will be the BackgroundImagePlaneSceneNode3D.
+
+    Note: despite the historic name, the default background is now a *sphere* (360°)
+    rather than a plane. Use
+    ``nag.model.view_dependent_background_image_plane_scene_node_3d.ViewDependentBackgroundImagePlaneSceneNode3D``
+    to restore the original planar background."""
 
     background_plane_kwargs: Dict[str, Any] = field(default_factory=default_background_plane_kwargs)
     """Keyword arguments for the background plane constructor."""
