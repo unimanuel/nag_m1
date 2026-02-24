@@ -731,8 +731,13 @@ class NAGFunctionalModel(NAGModel):
         # If the configured background is spherical, overwrite the background
         # entry with an actual ray-sphere intersection (camera and objects are
         # expected to be inside the sphere).
-        if has_background and getattr(objects[self.background_idx], "is_spherical_background", False):
-            bg_i = int(self.background_idx)
+        # NOTE: `self.background_idx` is the index in the *full* `self.objects` list.
+        # In this forward we build a *filtered* `objects` list based on
+        # `enabled_objects`, which shifts indices. So we must locate the
+        # background within the filtered list.
+        bg_i = next((i for i, o in enumerate(objects)
+                     if getattr(o, "is_spherical_background", False)), None)
+        if has_background and bg_i is not None:
             bg_T = global_positions[OB_mask][bg_i]  # (T,4,4)
             center_T = bg_T[:, :3, 3]  # (T,3)
             center_BT = center_T.unsqueeze(0)  # (1,T,3) broadcast over B
