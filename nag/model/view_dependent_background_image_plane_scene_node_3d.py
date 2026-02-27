@@ -264,11 +264,14 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
 
         # Optional UV post-processing. Spherical backgrounds set `wrap_u=True`
         # (longitude periodicity) and `clamp_v=True` (latitude bounds).
-        if getattr(self, "wrap_u", False):
-            query_points[..., 0] = torch.remainder(
-                query_points[..., 0] + 0.5, 1.0) - 0.5
-        if getattr(self, "clamp_v", False):
-            query_points[..., 1] = query_points[..., 1].clamp(-0.5, 0.5)
+        if getattr(self, "wrap_u", False) or getattr(self, "clamp_v", False):
+            qx = query_points[..., 0]
+            qy = query_points[..., 1]
+            if getattr(self, "wrap_u", False):
+                qx = torch.remainder(qx + 0.5, 1.0) - 0.5
+            if getattr(self, "clamp_v", False):
+                qy = qy.clamp(-0.5, 0.5)
+            query_points = torch.stack([qx, qy], dim=-1)
         # We need to collapse the time dimension and treat is as normal point, as the image plane should be "timeless"
         # And the flow as adjusted for the time already
         query_points = query_points.reshape(-1, 2)  # (B*T, 2)

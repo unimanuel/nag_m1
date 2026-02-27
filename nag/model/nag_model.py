@@ -231,8 +231,14 @@ def get_object_information(
                 center=center_BT.to(global_ray_origins.dtype),
                 radius=radius,
             )
-            intersection_points[i] = pts_BT
-            is_inside[i] = hit_BT
+            intersection_points = torch.stack(
+                [pts_BT if j == i else intersection_points[j] for j in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if j == i else is_inside[j] for j in range(is_inside.shape[0])],
+                dim=0,
+            )
 
     # Intersection Points shape is (N, B, T, 3)
     # is_inside shape is (N, B, T)

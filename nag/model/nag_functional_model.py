@@ -753,13 +753,27 @@ class NAGFunctionalModel(NAGModel):
                 radius=radius,
             )
 
-            intersection_points[bg_i] = pts_BT
-            is_inside[bg_i] = hit_BT
+            intersection_points = torch.stack(
+                [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if i == bg_i else is_inside[i] for i in range(is_inside.shape[0])],
+                dim=0,
+            )
 
             # Provide per-ray reference points/normals for gradient hooks.
             if plane_p is not None and plane_n is not None:
-                plane_p[bg_i] = center_BT.expand_as(pts_BT)
-                plane_n[bg_i] = normalize(pts_BT - plane_p[bg_i])
+                bg_plane_p = center_BT.expand_as(pts_BT)
+                bg_plane_n = normalize(pts_BT - bg_plane_p)
+                plane_p = torch.stack(
+                    [bg_plane_p if i == bg_i else plane_p[i] for i in range(plane_p.shape[0])],
+                    dim=0,
+                )
+                plane_n = torch.stack(
+                    [bg_plane_n if i == bg_i else plane_n[i] for i in range(plane_n.shape[0])],
+                    dim=0,
+                )
 
         global_plane_positions = global_positions[OB_mask]
 
@@ -1351,8 +1365,14 @@ class NAGFunctionalModel(NAGModel):
                 center=center_BT.to(uv.dtype),
                 radius=radius,
             )
-            intersection_points[bg_i] = pts_BT
-            is_inside[bg_i] = hit_BT
+            intersection_points = torch.stack(
+                [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if i == bg_i else is_inside[i] for i in range(is_inside.shape[0])],
+                dim=0,
+            )
 
         global_plane_positions = global_positions[OB_mask]
 
@@ -1485,8 +1505,14 @@ class NAGFunctionalModel(NAGModel):
                 center=center_BT.to(uv.dtype),
                 radius=radius,
             )
-            intersection_points[bg_i] = pts_BT
-            is_inside[bg_i] = hit_BT
+            intersection_points = torch.stack(
+                [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if i == bg_i else is_inside[i] for i in range(is_inside.shape[0])],
+                dim=0,
+            )
 
         global_plane_positions = global_positions[OB_mask]
 
