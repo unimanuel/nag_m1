@@ -63,7 +63,7 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         return self.sphere_radius
 
     def _global_points_to_sphere_uv(self, points_global: torch.Tensor, global_position: torch.Tensor) -> torch.Tensor:
-        pts_local = global_to_local(global_position, points_global, v_includes_time=True)[..., :3]
+        pts_local = global_to_local(global_position, points_global, v_include_time=True)[..., :3]
         return direction_to_equirect_uv(pts_local, y_flip=self.sphere_uv_y_flip)
 
     def _to_local_tangent_rays(
@@ -76,12 +76,12 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         """Return ray directions expressed in the hit-point tangent frame."""
         # Convert ray directions to sphere-local coordinates (about the sphere center).
         ray_targets_global = ray_origins_global + ray_directions_global
-        ray_o_local = global_to_local(global_position, ray_origins_global, v_includes_time=True)[..., :3]
-        ray_t_local = global_to_local(global_position, ray_targets_global, v_includes_time=True)[..., :3]
+        ray_o_local = global_to_local(global_position, ray_origins_global, v_include_time=True)[..., :3]
+        ray_t_local = global_to_local(global_position, ray_targets_global, v_include_time=True)[..., :3]
         ray_d_local = ray_t_local - ray_o_local
 
         # Normal at hit point in local coords.
-        hit_local = global_to_local(global_position, hit_points_global, v_includes_time=True)[..., :3]
+        hit_local = global_to_local(global_position, hit_points_global, v_include_time=True)[..., :3]
         n = normalize(hit_local)
 
         # Express direction in tangent coordinates where n is +z.

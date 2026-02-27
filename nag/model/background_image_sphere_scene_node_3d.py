@@ -76,7 +76,7 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             (T, 4, 4) transformation matrix of this node.
         """
         # Local points in sphere coordinates (origin at sphere center)
-        pts_local = global_to_local(global_position, points_global, v_includes_time=True)[..., :3]
+        pts_local = global_to_local(global_position, points_global, v_include_time=True)[..., :3]
         uv01 = direction_to_equirect_uv(pts_local, y_flip=self.sphere_uv_y_flip)
         return uv01
 
