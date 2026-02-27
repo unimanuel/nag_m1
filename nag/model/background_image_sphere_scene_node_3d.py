@@ -163,8 +163,10 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         index: Optional[int] = None,
         nag_model: Optional[Any] = None,
         color_mask_resolution: Optional[VEC_TYPE] = None,
+        color_mask_smoothing: bool = True,
         num_flow_control_points: Optional[int] = None,
         config: Any = None,
+        correct_lens_distortion: bool = False,
         proxy_init: bool = False,
         sphere_uv_y_flip: bool = False,
         **kwargs,
@@ -229,6 +231,12 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         translation_t = center[None, :].expand(len(camera._times), -1).to(dtype)
         orientation_t = torch.zeros((len(camera._times), 4), dtype=dtype, device=times.device)
         orientation_t[..., 3] = 1.0
+
+        # Keep compatibility with the planar background `for_camera` API.
+        # These reprojection-specific options are meaningful for plane init,
+        # but the spherical init path does not use them.
+        del color_mask_smoothing
+        del correct_lens_distortion
 
         args = dict(kwargs)
         args.update(
