@@ -76,6 +76,8 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             (T, 4, 4) transformation matrix of this node.
         """
         # Local points in sphere coordinates (origin at sphere center)
+        # `global_to_local` uses the singular `v_include_time` keyword; the
+        # sphere path needs the timed transform variant here.
         pts_local = global_to_local(global_position, points_global, v_include_time=True)[..., :3]
         uv01 = direction_to_equirect_uv(pts_local, y_flip=self.sphere_uv_y_flip)
         return uv01
@@ -232,7 +234,8 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         orientation_t = torch.zeros((len(camera._times), 4), dtype=dtype, device=times.device)
         orientation_t[..., 3] = 1.0
 
-        # Keep compatibility with the planar background `for_camera` API.
+        # Keep compatibility with the planar background `for_camera` API so the
+        # runner can pass the same kwargs to plane and sphere backgrounds.
         # These reprojection-specific options are meaningful for plane init,
         # but the spherical init path does not use them.
         del color_mask_smoothing

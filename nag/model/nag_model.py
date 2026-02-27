@@ -231,6 +231,8 @@ def get_object_information(
                 center=center_BT.to(global_ray_origins.dtype),
                 radius=radius,
             )
+            # Rebuild the stacks instead of mutating a slice so this legacy path
+            # matches the autograd-safe behavior of the functional model.
             intersection_points = torch.stack(
                 [pts_BT if j == i else intersection_points[j] for j in range(intersection_points.shape[0])],
                 dim=0,

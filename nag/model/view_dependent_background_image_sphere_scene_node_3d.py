@@ -63,6 +63,8 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         return self.sphere_radius
 
     def _global_points_to_sphere_uv(self, points_global: torch.Tensor, global_position: torch.Tensor) -> torch.Tensor:
+        # `global_to_local` uses the singular `v_include_time` keyword; the
+        # sphere path needs the timed transform variant here.
         pts_local = global_to_local(global_position, points_global, v_include_time=True)[..., :3]
         return direction_to_equirect_uv(pts_local, y_flip=self.sphere_uv_y_flip)
 
@@ -76,6 +78,7 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         """Return ray directions expressed in the hit-point tangent frame."""
         # Convert ray directions to sphere-local coordinates (about the sphere center).
         ray_targets_global = ray_origins_global + ray_directions_global
+        # Use the timed transform path because the sphere center can vary over time.
         ray_o_local = global_to_local(global_position, ray_origins_global, v_include_time=True)[..., :3]
         ray_t_local = global_to_local(global_position, ray_targets_global, v_include_time=True)[..., :3]
         ray_d_local = ray_t_local - ray_o_local
@@ -186,7 +189,8 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         sphere_uv_y_flip: bool = False,
         **kwargs,
     ):
-        # Delegate most init to BackgroundImageSphereSceneNode3D.for_camera but instantiate cls.
+        # Reuse the shared spherical init logic so view-dependent and plain
+        # spherical backgrounds stay argument-compatible with the runner.
         return BackgroundImageSphereSceneNode3D.for_camera.__func__(
             cls,
             camera=camera,

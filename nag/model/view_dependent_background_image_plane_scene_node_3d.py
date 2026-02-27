@@ -265,6 +265,8 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
         # Optional UV post-processing. Spherical backgrounds set `wrap_u=True`
         # (longitude periodicity) and `clamp_v=True` (latitude bounds).
         if getattr(self, "wrap_u", False) or getattr(self, "clamp_v", False):
+            # Rebuild the tensor instead of writing into slices so autograd does
+            # not see an in-place modification during sphere-background training.
             qx = query_points[..., 0]
             qy = query_points[..., 1]
             if getattr(self, "wrap_u", False):

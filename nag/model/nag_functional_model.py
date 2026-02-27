@@ -753,6 +753,8 @@ class NAGFunctionalModel(NAGModel):
                 radius=radius,
             )
 
+            # Rebuild the object stacks instead of assigning into a slice so the
+            # background override stays compatible with autograd in training.
             intersection_points = torch.stack(
                 [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
                 dim=0,
@@ -766,6 +768,8 @@ class NAGFunctionalModel(NAGModel):
             if plane_p is not None and plane_n is not None:
                 bg_plane_p = center_BT.expand_as(pts_BT)
                 bg_plane_n = normalize(pts_BT - bg_plane_p)
+                # These hook inputs participate in backward too, so avoid
+                # slice assignment for the same reason as above.
                 plane_p = torch.stack(
                     [bg_plane_p if i == bg_i else plane_p[i] for i in range(plane_p.shape[0])],
                     dim=0,
@@ -1365,6 +1369,8 @@ class NAGFunctionalModel(NAGModel):
                 center=center_BT.to(uv.dtype),
                 radius=radius,
             )
+            # Rebuild the stacks instead of mutating a view so object-specific
+            # rendering stays autograd-safe with spherical backgrounds.
             intersection_points = torch.stack(
                 [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
                 dim=0,
@@ -1505,6 +1511,8 @@ class NAGFunctionalModel(NAGModel):
                 center=center_BT.to(uv.dtype),
                 radius=radius,
             )
+            # Rebuild the stacks instead of mutating a view so modality queries
+            # reuse the same autograd-safe override as training forward.
             intersection_points = torch.stack(
                 [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
                 dim=0,
