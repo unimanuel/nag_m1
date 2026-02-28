@@ -304,8 +304,21 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             raise ValueError("world must be provided")
 
         if color_mask_resolution is None or color_mask_resolution == DEFAULT:
-            # Equirectangular: width ~ 2*height
-            color_mask_resolution = [512, 1024]
+            # Scale the sphere texture from the available image resolution so
+            # the equirectangular init does not lose detail to a hard-coded
+            # low-res map on larger scenes. Keep the old 512x1024 floor so the
+            # smaller debug configs do not regress.
+            res_x = min(camera._image_resolution[1], images.shape[3])
+            res_y = min(camera._image_resolution[0], images.shape[2])
+            base_height = int(round(float(res_y) * (1.0 + float(relative_scale_margin))))
+            base_width = int(round(float(res_x) * (1.0 + float(relative_scale_margin))))
+            sphere_height = max(512, base_height)
+            sphere_width = max(1024, base_width, 2 * sphere_height)
+            color_mask_resolution = [sphere_height, sphere_width]
+            logger.info(
+                "Color resolution on spherical background set to default. "
+                f"Using resolution {sphere_height} x {sphere_width} (H x W)."
+            )
 
         if num_flow_control_points is None:
             if config is not None and hasattr(config, "plane_flow_control_points_ratio"):
