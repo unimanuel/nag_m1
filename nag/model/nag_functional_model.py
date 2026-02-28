@@ -1413,13 +1413,26 @@ class NAGFunctionalModel(NAGModel):
             ray_local_origin = global_to_local(
                 global_plane_positions[i], global_ray_origins, v_include_time=True)[..., :3]
             ray_local_directions = ray_local_target - ray_local_origin
+            # Spherical backgrounds need their true 3D hit points and global
+            # rays so they can rebuild equirectangular UVs and tangent-frame
+            # view directions. Planar objects still consume plane-space UVs.
+            if getattr(obj, "is_spherical_background", False):
+                query_points = intersection_points[i]
+                query_ray_origins = global_ray_origins
+                query_ray_directions = global_ray_directions
+                uv_in_plane_space = False
+            else:
+                query_points = plane_intersection_points[i]
+                query_ray_origins = ray_local_origin
+                query_ray_directions = ray_local_directions
+                uv_in_plane_space = True
 
-            colors[i], alphas[i] = obj(plane_intersection_points[i],
+            colors[i], alphas[i] = obj(query_points,
                                        is_inside=is_inside[i],
-                                       ray_origins=ray_local_origin,
-                                       ray_directions=ray_local_directions,
+                                       ray_origins=query_ray_origins,
+                                       ray_directions=query_ray_directions,
                                        t=t,
-                                       uv_in_plane_space=True,
+                                       uv_in_plane_space=uv_in_plane_space,
                                        sin_epoch=self.sin_epoch,
                                        global_position=global_plane_positions[i],
                                        plane_scale=local_plane_scale[i],
@@ -1542,6 +1555,11 @@ class NAGFunctionalModel(NAGModel):
             OB, B * T, -1).permute(1, 0, 2), local_plane_scale, local_plane_scale_offset).permute(1, 0, 2).reshape(OB, B, T, -1)
 
         ray_global_target = global_ray_origins + global_ray_directions
+        spherical_object_mask = torch.tensor(
+            [getattr(obj, "is_spherical_background", False) for obj in objects],
+            device=uv.device,
+            dtype=torch.bool,
+        )
 
         for i, obj in enumerate(objects):
             # Trace each ray through the object if it is inside
@@ -1551,17 +1569,33 @@ class NAGFunctionalModel(NAGModel):
             ray_local_origin = global_to_local(
                 global_plane_positions[i], global_ray_origins, v_include_time=True)[..., :3]
             ray_local_directions = ray_local_target - ray_local_origin
-            c, a, f = obj.forward_modality(plane_intersection_points[i],
+            # The spherical background cannot reuse plane UVs in the modality
+            # pass; it needs the global sphere hits and global rays to recover
+            # the correct texture lookup and tangent-frame view direction.
+            if spherical_object_mask[i]:
+                query_points = intersection_points[i]
+                query_ray_origins = global_ray_origins
+                query_ray_directions = global_ray_directions
+                uv_in_plane_space = False
+            else:
+                query_points = plane_intersection_points[i]
+                query_ray_origins = ray_local_origin
+                query_ray_directions = ray_local_directions
+                uv_in_plane_space = True
+
+            c, a, f = obj.forward_modality(query_points,
                                            is_inside=is_inside[i],
                                            t=t,
-                                           ray_origins=ray_local_origin,
-                                           ray_directions=ray_local_directions,
+                                           ray_origins=query_ray_origins,
+                                           ray_directions=query_ray_directions,
                                            sin_epoch=self.sin_epoch,
                                            next_sin_epoch=self.next_sin_epoch,
                                            batch_idx=batch_idx,
                                            max_batch_idx=self.num_batches,
                                            query_color=color,
                                            query_alpha=alpha,
+                                           global_position=global_plane_positions[i],
+                                           uv_in_plane_space=uv_in_plane_space,
                                            context=context
                                            )
             if color:
@@ -1579,22 +1613,34 @@ class NAGFunctionalModel(NAGModel):
             if out_of_bounds_termination:
                 flows[~is_inside] = 0.
 
-            # As flow is in the object space, we need to transform it to the camera space
-            flow_end = plane_intersection_points + flows
-            flow_end = batched_plane_coordinates_to_local(flow_end.reshape(OB, B * T, -1).permute(
-                1, 0, 2), local_plane_scale, local_plane_scale_offset).permute(1, 0, 2).reshape(OB, B, T, -1)
-            flow_end = local_to_global(global_plane_positions, flow_end.permute(1, 0, 2, 3).reshape(
-                B, OB * T, -1), v_include_time=True).reshape(B, OB, T, -1).permute(1, 0, 2, 3)[..., :3]  # Shape (OB, B, T, 3)
-            flow_end = flow_end.reshape(OB * B, T, 3)
-            flow_end = global_to_local(
-                global_positions[CIDX], flow_end, v_include_time=True)  # Shape (OB * B, T, 3)
-            flow_end = local_to_image_coordinates(flow_end.permute(1, 0, 2), self.camera.get_intrinsics(
-                t), self.camera.focal_length, self.camera.get_lens_distortion() if lens_distortion_correction else None, v_includes_time=True)  # Shape (T, OB * B, 2)
-            flow_end = flow_end.permute(
-                1, 0, 2).reshape(OB, B, T, 2)
-            flow_end = flow_end - \
-                uv.unsqueeze(0).unsqueeze(2).expand(OB, -1, T, -1)
-            flow_end[~is_inside] = 0.
+            # Reproject only the planar objects. Spherical backgrounds return a
+            # zero flow tensor already, and forcing their 3D hits through plane
+            # coordinates would fabricate bogus image-space motion.
+            planar_object_mask = ~spherical_object_mask
+            flow_end = torch.zeros_like(flows)
+            if planar_object_mask.any():
+                planar_idx = planar_object_mask.nonzero(as_tuple=False).squeeze(-1)
+                planar_points = plane_intersection_points[planar_idx]
+                planar_flows = flows[planar_idx]
+                planar_positions = global_plane_positions[planar_idx]
+                planar_scale = local_plane_scale[planar_idx]
+                planar_scale_offset = local_plane_scale_offset[planar_idx]
+                planar_flow_end = planar_points + planar_flows
+                planar_flow_end = batched_plane_coordinates_to_local(planar_flow_end.reshape(len(planar_idx), B * T, -1).permute(
+                    1, 0, 2), planar_scale, planar_scale_offset).permute(1, 0, 2).reshape(len(planar_idx), B, T, -1)
+                planar_flow_end = local_to_global(planar_positions, planar_flow_end.permute(1, 0, 2, 3).reshape(
+                    B, len(planar_idx) * T, -1), v_include_time=True).reshape(B, len(planar_idx), T, -1).permute(1, 0, 2, 3)[..., :3]
+                planar_flow_end = planar_flow_end.reshape(len(planar_idx) * B, T, 3)
+                planar_flow_end = global_to_local(
+                    global_positions[CIDX], planar_flow_end, v_include_time=True)
+                planar_flow_end = local_to_image_coordinates(planar_flow_end.permute(1, 0, 2), self.camera.get_intrinsics(
+                    t), self.camera.focal_length, self.camera.get_lens_distortion() if lens_distortion_correction else None, v_includes_time=True)
+                planar_flow_end = planar_flow_end.permute(
+                    1, 0, 2).reshape(len(planar_idx), B, T, 2)
+                planar_flow_end = planar_flow_end - \
+                    uv.unsqueeze(0).unsqueeze(2).expand(len(planar_idx), -1, T, -1)
+                planar_flow_end[~is_inside[planar_idx]] = 0.
+                flow_end[planar_idx] = planar_flow_end
             flows = flow_end
         return colors, alphas, flows
 

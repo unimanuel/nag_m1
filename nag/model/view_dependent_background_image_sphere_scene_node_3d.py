@@ -147,21 +147,47 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         rel_frac_flow: Optional[torch.Tensor] = None,
         ray_origins: Optional[torch.Tensor] = None,
         ray_directions: Optional[torch.Tensor] = None,
+        global_position: Optional[torch.Tensor] = None,
+        uv_in_plane_space: bool = True,
         context: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        uv_net = uv_plane[..., :2] - 0.5
-        return self.compute_rgb_alpha(
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if uv_in_plane_space:
+            uv01 = uv_plane[..., :2]
+            ray_d_tan = ray_directions
+        else:
+            if global_position is None:
+                global_position = self.get_global_position(t)
+            uv01 = self._global_points_to_sphere_uv(uv_plane, global_position)
+            # Object-modality rendering hands us global rays for spherical
+            # backgrounds so we can reuse the same tangent-frame conversion as
+            # the main forward path.
+            if self.ray_dependent and ray_origins is not None and ray_directions is not None:
+                ray_d_tan = self._to_local_tangent_rays(
+                    ray_origins_global=ray_origins,
+                    ray_directions_global=ray_directions,
+                    hit_points_global=uv_plane,
+                    global_position=global_position,
+                )
+            else:
+                ray_d_tan = ray_directions
+
+        uv_net = uv01 - 0.5
+        rgb, alpha = self.compute_rgb_alpha(
             uv=uv_net,
             t=t,
             sin_epoch=sin_epoch,
             right_idx_flow=right_idx_flow,
             rel_frac_flow=rel_frac_flow,
-            ray_origins=ray_origins,
-            ray_directions=ray_directions,
+            ray_origins=None,
+            ray_directions=ray_d_tan,
             context=context,
             **kwargs,
         )
+        # Match the planar modality API: callers always expect an explicit flow
+        # tensor even when the background contributes no motion of its own.
+        flow = torch.zeros_like(uv_net)
+        return rgb, alpha, flow
 
     # Reuse the robust spherical initialization.
     @classmethod

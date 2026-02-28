@@ -130,12 +130,22 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         sin_epoch: torch.Tensor,
         right_idx_flow: Optional[torch.Tensor] = None,
         rel_frac_flow: Optional[torch.Tensor] = None,
+        global_position: Optional[torch.Tensor] = None,
+        uv_in_plane_space: bool = True,
         context: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # uv_plane expected in [0, 1]
-        uv_net = uv_plane[..., :2] - 0.5
-        return self.compute_rgb_alpha(
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # The functional modality path is shared with planar objects, so this
+        # method accepts either plane-space UVs or the global 3D sphere hits.
+        if uv_in_plane_space:
+            uv01 = uv_plane[..., :2]
+        else:
+            if global_position is None:
+                global_position = self.get_global_position(t)
+            uv01 = self._global_points_to_sphere_uv(uv_plane, global_position)
+
+        uv_net = uv01 - 0.5
+        rgb, alpha = self.compute_rgb_alpha(
             uv=uv_net,
             t=t,
             sin_epoch=sin_epoch,
@@ -144,6 +154,10 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             context=context,
             **kwargs,
         )
+        # Modality rendering expects every object to provide a flow tensor; the
+        # spherical background has no separate modality flow, so return zeros.
+        flow = torch.zeros_like(uv_net)
+        return rgb, alpha, flow
 
     # ------------------------------------------------------------------
     # Construction helper
