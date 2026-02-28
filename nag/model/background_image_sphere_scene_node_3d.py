@@ -27,7 +27,7 @@ from tools.util.torch import tensorify
 from tools.util.typing import DEFAULT, VEC_TYPE
 from tools.logger.logging import logger
 
-from nag.model.sphere_utils import direction_to_equirect_uv, equirect_uv_to_direction
+from nag.model.sphere_utils import direction_to_equirect_uv, equirect_uv_to_direction, normalize
 
 
 class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
@@ -119,8 +119,9 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             fallback_rgb = (images * background_mask).sum(dim=(0, 2, 3)) / denom
         fallback_rgb = fallback_rgb.clamp(0, 1)
 
-        accumulated_rgb = torch.zeros((3, tex_h, tex_w), dtype=dtype, device=times.device)
-        accumulated_weight = torch.zeros((1, tex_h, tex_w), dtype=dtype, device=times.device)
+        best_rgb = torch.zeros((3, tex_h, tex_w), dtype=dtype, device=times.device)
+        best_weight = torch.zeros((1, tex_h, tex_w), dtype=dtype, device=times.device)
+        sphere_normals = texel_dirs
 
         for frame_idx, frame_time in enumerate(times):
             image_points, valid = camera.global_to_image_coordinates(
@@ -138,6 +139,14 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
                 image_resolution=camera._image_resolution,
                 align_corners=align_corners,
             ).unsqueeze(0)
+            # Stop uniformly averaging every valid frame: pick the best view
+            # per texel so the sphere init keeps sharper details instead of
+            # blending across frames with different perspective/parallax.
+            dist2 = sample_grid[0, ..., 0] ** 2 + sample_grid[0, ..., 1] ** 2
+            center_weight = torch.exp(-dist2).unsqueeze(0)
+            camera_position = camera.get_global_position(t=frame_time.unsqueeze(0))[0, :3, 3].to(dtype)
+            view_dir = normalize(sphere_points - camera_position.view(1, 1, 3))
+            incidence_weight = (view_dir * sphere_normals).sum(dim=-1).clamp_min(0.0).unsqueeze(0)
 
             sampled_rgb = F.grid_sample(
                 images[frame_idx:frame_idx + 1].to(dtype=dtype),
@@ -153,15 +162,16 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
                 padding_mode="zeros",
                 align_corners=align_corners,
             )[0]
-            weight = sampled_bg * valid
-            accumulated_rgb = accumulated_rgb + sampled_rgb * weight
-            accumulated_weight = accumulated_weight + weight
+            weight = sampled_bg * valid * center_weight * incidence_weight
+            use_sample = weight > best_weight
+            best_rgb = torch.where(use_sample.expand_as(best_rgb), sampled_rgb, best_rgb)
+            best_weight = torch.where(use_sample, weight, best_weight)
 
         # Any texels unseen by all cameras keep a reasonable color prior
         # instead of starting from black or a flat zero-filled patch.
         return torch.where(
-            accumulated_weight > 0,
-            accumulated_rgb / accumulated_weight.clamp_min(1e-6),
+            best_weight > 0,
+            best_rgb,
             fallback_rgb[:, None, None].expand(3, tex_h, tex_w),
         ).contiguous()
 
