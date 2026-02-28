@@ -63,6 +63,23 @@ def direction_to_equirect_uv(
     return torch.stack([u, v], dim=-1)
 
 
+def equirect_uv_to_direction(
+    uv: torch.Tensor,
+    y_flip: bool = False,
+) -> torch.Tensor:
+    """Convert equirectangular UV in [0, 1] to a unit direction vector."""
+    u, v = uv.unbind(dim=-1)
+    if y_flip:
+        v = 1.0 - v
+    lon = u * (2.0 * torch.pi) - torch.pi
+    lat = 0.5 * torch.pi - v * torch.pi
+    cos_lat = torch.cos(lat)
+    x = torch.sin(lon) * cos_lat
+    y = torch.sin(lat)
+    z = torch.cos(lon) * cos_lat
+    return torch.stack([x, y, z], dim=-1)
+
+
 def make_tangent_basis(n: torch.Tensor, eps: float = 1e-8) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Create an orthonormal tangent basis (t1, t2, n) for a unit normal n.
 

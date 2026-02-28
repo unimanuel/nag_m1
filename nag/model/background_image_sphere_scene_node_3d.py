@@ -17,6 +17,7 @@ networks.
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 
 from nag.model.background_image_plane_scene_node_3d import BackgroundImagePlaneSceneNode3D
 from nag.model.timed_camera_scene_node_3d import TimedCameraSceneNode3D
@@ -26,7 +27,7 @@ from tools.util.torch import tensorify
 from tools.util.typing import DEFAULT, VEC_TYPE
 from tools.logger.logging import logger
 
-from nag.model.sphere_utils import direction_to_equirect_uv
+from nag.model.sphere_utils import direction_to_equirect_uv, equirect_uv_to_direction
 
 
 class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
@@ -57,6 +58,112 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
 
     def get_sphere_radius(self) -> torch.Tensor:
         return self.sphere_radius
+
+    @staticmethod
+    def _project_points_to_grid(
+        image_points: torch.Tensor,
+        image_resolution: torch.Tensor,
+        align_corners: bool,
+    ) -> torch.Tensor:
+        """Convert pixel coordinates to the normalized grid_sample domain."""
+        height = int(image_resolution[0].item())
+        width = int(image_resolution[1].item())
+        if align_corners:
+            grid_x = (image_points[..., 0] / max(width - 1, 1)) * 2.0 - 1.0
+            grid_y = (image_points[..., 1] / max(height - 1, 1)) * 2.0 - 1.0
+        else:
+            grid_x = ((image_points[..., 0] + 0.5) / width) * 2.0 - 1.0
+            grid_y = ((image_points[..., 1] + 0.5) / height) * 2.0 - 1.0
+        return torch.stack([grid_x, grid_y], dim=-1)
+
+    @classmethod
+    def _reproject_images_to_sphere_texture(
+        cls,
+        camera: TimedCameraSceneNode3D,
+        images: torch.Tensor,
+        masks: torch.Tensor,
+        times: torch.Tensor,
+        center: torch.Tensor,
+        radius: torch.Tensor,
+        resolution: VEC_TYPE,
+        dtype: torch.dtype,
+        y_flip: bool = False,
+        align_corners: bool = True,
+    ) -> torch.Tensor:
+        """Build an equirectangular initialization by sampling valid background pixels."""
+        tex_h = int(resolution[0])
+        tex_w = int(resolution[1])
+
+        # Project each texel center back into the cameras so the sphere starts
+        # from a stitched background texture instead of a single mean color.
+        v = (torch.arange(tex_h, dtype=dtype, device=times.device) + 0.5) / tex_h
+        u = (torch.arange(tex_w, dtype=dtype, device=times.device) + 0.5) / tex_w
+        vv, uu = torch.meshgrid(v, u, indexing="ij")
+        sphere_uv = torch.stack([uu, vv], dim=-1)
+        texel_dirs = equirect_uv_to_direction(sphere_uv, y_flip=y_flip)
+        sphere_points = center.view(1, 1, 3) + texel_dirs * radius
+
+        background_mask = (masks.sum(dim=1, keepdim=True) == 0).to(images.dtype)
+        if background_mask.shape[-2:] != images.shape[-2:]:
+            background_mask = F.interpolate(
+                background_mask,
+                size=images.shape[-2:],
+                mode="nearest",
+            )
+
+        denom = background_mask.sum()
+        if denom.item() < 1:
+            fallback_rgb = images.mean(dim=(0, 2, 3))
+            logger.warning("No background pixels found in masks; falling back to global mean color.")
+        else:
+            fallback_rgb = (images * background_mask).sum(dim=(0, 2, 3)) / denom
+        fallback_rgb = fallback_rgb.clamp(0, 1)
+
+        accumulated_rgb = torch.zeros((3, tex_h, tex_w), dtype=dtype, device=times.device)
+        accumulated_weight = torch.zeros((1, tex_h, tex_w), dtype=dtype, device=times.device)
+
+        for frame_idx, frame_time in enumerate(times):
+            image_points, valid = camera.global_to_image_coordinates(
+                sphere_points,
+                t=frame_time.unsqueeze(0),
+                v_includes_time=False,
+                clamp=False,
+                return_ok=True,
+            )
+            image_points = image_points[..., 0, :]
+            valid = valid[..., 0].to(dtype).unsqueeze(0)
+
+            sample_grid = cls._project_points_to_grid(
+                image_points=image_points,
+                image_resolution=camera._image_resolution,
+                align_corners=align_corners,
+            ).unsqueeze(0)
+
+            sampled_rgb = F.grid_sample(
+                images[frame_idx:frame_idx + 1].to(dtype=dtype),
+                sample_grid,
+                mode="bilinear",
+                padding_mode="border",
+                align_corners=align_corners,
+            )[0]
+            sampled_bg = F.grid_sample(
+                background_mask[frame_idx:frame_idx + 1],
+                sample_grid,
+                mode="nearest",
+                padding_mode="zeros",
+                align_corners=align_corners,
+            )[0]
+            weight = sampled_bg * valid
+            accumulated_rgb = accumulated_rgb + sampled_rgb * weight
+            accumulated_weight = accumulated_weight + weight
+
+        # Any texels unseen by all cameras keep a reasonable color prior
+        # instead of starting from black or a flat zero-filled patch.
+        return torch.where(
+            accumulated_weight > 0,
+            accumulated_rgb / accumulated_weight.clamp_min(1e-6),
+            fallback_rgb[:, None, None].expand(3, tex_h, tex_w),
+        ).contiguous()
 
     # ------------------------------------------------------------------
     # Mapping: global intersection point -> spherical UV
@@ -189,9 +296,6 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
     ):
         """Initialize a spherical background.
 
-        We keep initialization deliberately simple and robust: we compute the mean
-        observed background color (mask==0) and fill the spherical texture with it.
-
         The sphere center is set to the mean camera position; its radius is chosen
         large enough to cover the camera trajectory plus the requested
         ``scene_cutoff_distance``.
@@ -209,36 +313,32 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             else:
                 num_flow_control_points = 1
 
-        # Compute a constant initial RGB from the visible background pixels.
-        if proxy_init:
-            init_rgb = torch.zeros((3, int(color_mask_resolution[0]), int(color_mask_resolution[1])), dtype=dtype, device=times.device)
-        else:
-            with torch.no_grad():
-                # background pixels where no object mask is present
-                bg_mask = (masks.sum(dim=1) == 0).to(images.dtype)  # (T, H, W)
-                # Avoid shape mismatch if masks resolution differs from images
-                if bg_mask.shape[-2:] != images.shape[-2:]:
-                    # Nearest down/up sample to images resolution
-                    bg_mask = torch.nn.functional.interpolate(
-                        bg_mask.unsqueeze(1), size=images.shape[-2:], mode="nearest"
-                    ).squeeze(1)
-                denom = bg_mask.sum() * 1.0
-                if denom.item() < 1:
-                    mean_rgb = images.mean(dim=(0, 2, 3))
-                    logger.warning("No background pixels found in masks; falling back to global mean color.")
-                else:
-                    mean_rgb = (images * bg_mask[:, None, :, :]).sum(dim=(0, 2, 3)) / denom
-                mean_rgb = mean_rgb.clamp(0, 1)
-                init_rgb = mean_rgb[:, None, None].expand(
-                    3, int(color_mask_resolution[0]), int(color_mask_resolution[1])
-                ).contiguous()
-
         # Sphere center: mean camera position
         cam_positions = camera.get_global_position(t=times)[:, :3, 3].detach()  # (T, 3)
         center = cam_positions.mean(dim=0)
         max_cam_dist = (cam_positions - center[None, :]).norm(dim=-1).max()
         # Conservative radius: trajectory radius + cutoff distance (+ margin)
         radius = (max_cam_dist + float(scene_cutoff_distance)) * (1.0 + float(relative_scale_margin))
+
+        if proxy_init:
+            init_rgb = torch.zeros((3, int(color_mask_resolution[0]), int(color_mask_resolution[1])), dtype=dtype, device=times.device)
+        else:
+            with torch.no_grad():
+                # Unlike the plane background, the sphere has no natural
+                # reference view, so seed it by averaging reprojected camera
+                # colors into an equirectangular texture instead of one flat mean.
+                init_rgb = BackgroundImageSphereSceneNode3D._reproject_images_to_sphere_texture(
+                    camera=camera,
+                    images=images,
+                    masks=masks,
+                    times=times,
+                    center=center.to(dtype),
+                    radius=radius.to(dtype),
+                    resolution=color_mask_resolution,
+                    dtype=dtype,
+                    y_flip=sphere_uv_y_flip,
+                    align_corners=getattr(config, "plane_align_corners", True) if config is not None else True,
+                )
 
         # Provide dummy plane scale/offset (unused for spherical UV), but required by base classes.
         plane_scale = torch.tensor([1.0, 1.0], dtype=dtype, device=times.device)
@@ -250,8 +350,8 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
 
         # Keep compatibility with the planar background `for_camera` API so the
         # runner can pass the same kwargs to plane and sphere backgrounds.
-        # These reprojection-specific options are meaningful for plane init,
-        # but the spherical init path does not use them.
+        # The spherical init stitches directly through the camera model, so the
+        # plane-specific smoothing/distortion knobs do not map one-to-one here.
         del color_mask_smoothing
         del correct_lens_distortion
 
