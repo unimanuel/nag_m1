@@ -1645,16 +1645,29 @@ class NAGFunctionalModel(NAGModel):
                 spherical_idx = spherical_object_mask.nonzero(as_tuple=False).squeeze(-1)
                 for idx in spherical_idx.tolist():
                     sphere_obj = objects[idx]
+                    # The sphere background predicts flow in its own texture domain
+                    # (equirectangular UV offsets), not directly in pixels. Move the
+                    # current sphere hit points by that native flow first so we can
+                    # ask the camera where those flowed surface points would land.
                     moved_global = sphere_obj.get_flowed_global_points(
                         points_global=intersection_points[idx],
                         flow=flows[idx],
                         global_position=global_plane_positions[idx],
                     )
+                    # Project the flowed 3D sphere points into the camera frame at
+                    # the current timestamps. `local_to_image_coordinates` expects
+                    # camera-local 3D points, so convert from global world space to
+                    # the local coordinates of the active camera trajectory first.
                     moved_camera_local = global_to_local(
                         global_positions[CIDX],
                         moved_global,
                         v_include_time=True,
                     )[..., :3]
+                    # Turn those camera-local 3D points into image coordinates using
+                    # the same intrinsics/lens model as the rest of the modality
+                    # pipeline. The result is the pixel position after applying the
+                    # learned spherical texture flow and reprojecting through the
+                    # actual camera model.
                     sphere_flow_end = local_to_image_coordinates(
                         moved_camera_local.permute(1, 0, 2),
                         self.camera.get_intrinsics(t),
@@ -1662,8 +1675,17 @@ class NAGFunctionalModel(NAGModel):
                         self.camera.get_lens_distortion() if lens_distortion_correction else None,
                         v_includes_time=True,
                     ).permute(1, 0, 2)
+                    # Convert the absolute flowed pixel coordinates into an image-
+                    # space displacement by subtracting the original queried pixel
+                    # positions. This matches the planar branch API: exported flow is
+                    # always "where the pixel moved to" minus "where it started".
                     sphere_flow_end = sphere_flow_end - uv.unsqueeze(1).expand(-1, T, -1)
+                    # Rays that never hit the sphere background should not export any
+                    # motion. Zero them out so invalid sphere reprojections do not
+                    # leak into saved modalities.
                     sphere_flow_end[~is_inside[idx]] = 0.
+                    # Store the final image-space flow for this spherical object into
+                    # the shared modality tensor alongside the planar objects.
                     flow_end[idx] = sphere_flow_end
             flows = flow_end
         return colors, alphas, flows
