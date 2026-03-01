@@ -21,7 +21,7 @@ import torch.nn.functional as F
 
 from nag.model.background_image_plane_scene_node_3d import BackgroundImagePlaneSceneNode3D
 from nag.model.timed_camera_scene_node_3d import TimedCameraSceneNode3D
-from nag.model.timed_discrete_scene_node_3d import global_to_local
+from nag.model.timed_discrete_scene_node_3d import global_to_local, local_to_global
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.torch import tensorify
 from tools.util.typing import DEFAULT, VEC_TYPE
@@ -58,6 +58,64 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
 
     def get_sphere_radius(self) -> torch.Tensor:
         return self.sphere_radius
+
+    def _get_native_flow(
+        self,
+        uv_net: torch.Tensor,
+        t: torch.Tensor,
+        sin_epoch: torch.Tensor,
+        right_idx_flow: Optional[torch.Tensor] = None,
+        rel_frac_flow: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Return the learned texture-space flow before camera reprojection."""
+        if self.flow_weight != 0:
+            if self.deprecated_flow:
+                return self._compute_flow(
+                    uv_net,
+                    t,
+                    sin_epoch,
+                    right_idx_flow=right_idx_flow,
+                    rel_frac_flow=rel_frac_flow,
+                )
+            return self.get_flow(
+                uv_net,
+                t,
+                sin_epoch,
+                right_idx_flow=right_idx_flow,
+                rel_frac_flow=rel_frac_flow,
+            )
+        return torch.zeros_like(uv_net)
+
+    def _apply_uv_bounds(self, uv_net: torch.Tensor) -> torch.Tensor:
+        """Mirror the spherical wrap/clamp rules used during RGB sampling."""
+        qx = uv_net[..., 0]
+        qy = uv_net[..., 1]
+        if getattr(self, "wrap_u", False):
+            qx = torch.remainder(qx + 0.5, 1.0) - 0.5
+        if getattr(self, "clamp_v", False):
+            qy = qy.clamp(-0.5, 0.5)
+        return torch.stack([qx, qy], dim=-1)
+
+    def _sphere_uv_to_global_points(
+        self,
+        uv01: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> torch.Tensor:
+        """Convert equirectangular UVs back to global points on the sphere."""
+        local_dirs = equirect_uv_to_direction(uv01, y_flip=self.sphere_uv_y_flip)
+        local_points = local_dirs * self.get_sphere_radius().to(dtype=uv01.dtype, device=uv01.device)
+        return local_to_global(global_position, local_points, v_include_time=True)[..., :3]
+
+    def get_flowed_global_points(
+        self,
+        points_global: torch.Tensor,
+        flow: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> torch.Tensor:
+        """Move global sphere hit points by texture-space flow on the sphere."""
+        uv01 = self._global_points_to_sphere_uv(points_global, global_position)
+        flowed_uv = self._apply_uv_bounds(uv01 - 0.5 + flow) + 0.5
+        return self._sphere_uv_to_global_points(flowed_uv, global_position)
 
     @staticmethod
     def _project_points_to_grid(
@@ -262,6 +320,15 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             uv01 = self._global_points_to_sphere_uv(uv_plane, global_position)
 
         uv_net = uv01 - 0.5
+        # Export the same learned sphere-surface flow that drives texture
+        # lookup, then let the functional model reproject it into image space.
+        flow = self._get_native_flow(
+            uv_net,
+            t,
+            sin_epoch,
+            right_idx_flow=right_idx_flow,
+            rel_frac_flow=rel_frac_flow,
+        )
         rgb, alpha = self.compute_rgb_alpha(
             uv=uv_net,
             t=t,
@@ -271,9 +338,6 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             context=context,
             **kwargs,
         )
-        # Modality rendering expects every object to provide a flow tensor; the
-        # spherical background has no separate modality flow, so return zeros.
-        flow = torch.zeros_like(uv_net)
         return rgb, alpha, flow
 
     # ------------------------------------------------------------------

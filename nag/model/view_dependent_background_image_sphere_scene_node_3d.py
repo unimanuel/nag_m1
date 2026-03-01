@@ -62,6 +62,53 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
     def get_sphere_radius(self) -> torch.Tensor:
         return self.sphere_radius
 
+    def _get_native_flow(
+        self,
+        uv_net: torch.Tensor,
+        t: torch.Tensor,
+        sin_epoch: torch.Tensor,
+        right_idx_flow: Optional[torch.Tensor] = None,
+        rel_frac_flow: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        # Share the same sphere texture-flow definition as the non-view-dependent
+        # background even though this class inherits from the view-dependent
+        # planar base for its RGB path.
+        return BackgroundImageSphereSceneNode3D._get_native_flow(
+            self,
+            uv_net,
+            t,
+            sin_epoch,
+            right_idx_flow=right_idx_flow,
+            rel_frac_flow=rel_frac_flow,
+        )
+
+    def _apply_uv_bounds(self, uv_net: torch.Tensor) -> torch.Tensor:
+        return BackgroundImageSphereSceneNode3D._apply_uv_bounds(self, uv_net)
+
+    def _sphere_uv_to_global_points(
+        self,
+        uv01: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> torch.Tensor:
+        return BackgroundImageSphereSceneNode3D._sphere_uv_to_global_points(
+            self,
+            uv01,
+            global_position,
+        )
+
+    def get_flowed_global_points(
+        self,
+        points_global: torch.Tensor,
+        flow: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> torch.Tensor:
+        return BackgroundImageSphereSceneNode3D.get_flowed_global_points(
+            self,
+            points_global,
+            flow,
+            global_position,
+        )
+
     def _global_points_to_sphere_uv(self, points_global: torch.Tensor, global_position: torch.Tensor) -> torch.Tensor:
         # `global_to_local` uses the singular `v_include_time` keyword; the
         # sphere path needs the timed transform variant here.
@@ -173,6 +220,15 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
                 ray_d_tan = ray_directions
 
         uv_net = uv01 - 0.5
+        # Keep modality flow in sphere texture coordinates so the caller can
+        # convert it into true image-space motion with the camera model.
+        flow = self._get_native_flow(
+            uv_net,
+            t,
+            sin_epoch,
+            right_idx_flow=right_idx_flow,
+            rel_frac_flow=rel_frac_flow,
+        )
         rgb, alpha = self.compute_rgb_alpha(
             uv=uv_net,
             t=t,
@@ -184,9 +240,6 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
             context=context,
             **kwargs,
         )
-        # Match the planar modality API: callers always expect an explicit flow
-        # tensor even when the background contributes no motion of its own.
-        flow = torch.zeros_like(uv_net)
         return rgb, alpha, flow
 
     # Reuse the robust spherical initialization.

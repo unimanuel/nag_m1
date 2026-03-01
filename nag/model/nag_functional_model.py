@@ -1613,9 +1613,9 @@ class NAGFunctionalModel(NAGModel):
             if out_of_bounds_termination:
                 flows[~is_inside] = 0.
 
-            # Reproject only the planar objects. Spherical backgrounds return a
-            # zero flow tensor already, and forcing their 3D hits through plane
-            # coordinates would fabricate bogus image-space motion.
+            # Reproject planar and spherical native flows separately because
+            # the sphere flow lives in equirectangular texture coordinates,
+            # not in plane coordinates.
             planar_object_mask = ~spherical_object_mask
             flow_end = torch.zeros_like(flows)
             if planar_object_mask.any():
@@ -1641,6 +1641,30 @@ class NAGFunctionalModel(NAGModel):
                     uv.unsqueeze(0).unsqueeze(2).expand(len(planar_idx), -1, T, -1)
                 planar_flow_end[~is_inside[planar_idx]] = 0.
                 flow_end[planar_idx] = planar_flow_end
+            if spherical_object_mask.any():
+                spherical_idx = spherical_object_mask.nonzero(as_tuple=False).squeeze(-1)
+                for idx in spherical_idx.tolist():
+                    sphere_obj = objects[idx]
+                    moved_global = sphere_obj.get_flowed_global_points(
+                        points_global=intersection_points[idx],
+                        flow=flows[idx],
+                        global_position=global_plane_positions[idx],
+                    )
+                    moved_camera_local = global_to_local(
+                        global_positions[CIDX],
+                        moved_global,
+                        v_include_time=True,
+                    )[..., :3]
+                    sphere_flow_end = local_to_image_coordinates(
+                        moved_camera_local.permute(1, 0, 2),
+                        self.camera.get_intrinsics(t),
+                        self.camera.focal_length,
+                        self.camera.get_lens_distortion() if lens_distortion_correction else None,
+                        v_includes_time=True,
+                    ).permute(1, 0, 2)
+                    sphere_flow_end = sphere_flow_end - uv.unsqueeze(1).expand(-1, T, -1)
+                    sphere_flow_end[~is_inside[idx]] = 0.
+                    flow_end[idx] = sphere_flow_end
             flows = flow_end
         return colors, alphas, flows
 
