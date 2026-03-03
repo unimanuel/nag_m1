@@ -46,6 +46,9 @@ def default_control_point_times(
 class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappableSceneNode3D):
     """"Background image plane class with a neural field for color and flow, without learnable position parameter."""
 
+    TCNN_QUERY_CHUNK_SIZE = 131072
+    """Upper bound for per-call TCNN query rows to avoid unstable large CUTLASS matmuls."""
+
     encoding_image: tcnn.Encoding
     """The encoding for the image plane"""
 
@@ -301,6 +304,32 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
 
     # region Forward
 
+    def _run_tcnn_network(self,
+                          input_coords: torch.Tensor,
+                          encoding: tcnn.Encoding,
+                          network: tcnn.Network,
+                          sin_epoch: torch.Tensor,
+                          apply_sin_epoch_mask: bool = True) -> torch.Tensor:
+        """Evaluate a TCNN encoding/network pair in smaller chunks.
+
+        The global sampler limits total rays, but a single object can still receive a
+        very large contiguous hit set. Chunking avoids oversized TCNN/CUTLASS calls
+        during inference-heavy renders such as initial output generation.
+        """
+        if input_coords.shape[0] <= self.TCNN_QUERY_CHUNK_SIZE:
+            enc = encoding(input_coords)
+            if apply_sin_epoch_mask:
+                enc = utils.mask(enc, sin_epoch)
+            return network(enc)
+
+        out = []
+        for chunk in input_coords.split(self.TCNN_QUERY_CHUNK_SIZE, dim=0):
+            enc = encoding(chunk)
+            if apply_sin_epoch_mask:
+                enc = utils.mask(enc, sin_epoch)
+            out.append(network(enc))
+        return torch.cat(out, dim=0)
+
     def get_rgb(self, uv: torch.Tensor, sin_epoch: torch.Tensor) -> torch.Tensor:
         """Get the RGB values for the given uv coordinates.
 
@@ -322,10 +351,12 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
             query_points = query_points + 0.5
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            enc = self.encoding_image(query_points)
-            if self.coarse_to_fine_color:
-                enc = utils.mask(enc, sin_epoch)
-            network_rgb = self.network_image(enc)
+            network_rgb = self._run_tcnn_network(
+                query_points,
+                self.encoding_image,
+                self.network_image,
+                sin_epoch,
+                apply_sin_epoch_mask=self.coarse_to_fine_color)
         network_rgb = network_rgb.to(dtype=self.dtype)
         if self.rgb_rescaling and self.rgb_normalization.fitted:
             network_rgb = self.rgb_normalization(network_rgb)
@@ -356,8 +387,11 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
             uv_reference_frame = uv_reference_frame + 0.5
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow = self.network_flow(utils.mask(
-                self.encoding_flow(uv_reference_frame), sin_epoch))  # (B, 2)
+            flow = self._run_tcnn_network(
+                uv_reference_frame,
+                self.encoding_flow,
+                self.network_flow,
+                sin_epoch)  # (B, 2)
         flow = flow.to(dtype=self.dtype)
 
         flow = flow.reshape(-1, self.num_flow_control_points, 2)  # (B, FT, 2)
@@ -454,8 +488,11 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
         input_coords = input_coords.reshape(B * T, 2)
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow_points = self.network_flow(utils.mask(
-                self.encoding_flow(input_coords), sin_epoch))  # (B * T, 2)
+            flow_points = self._run_tcnn_network(
+                input_coords,
+                self.encoding_flow,
+                self.network_flow,
+                sin_epoch)  # (B * T, 2)
 
         flow_points = flow_points.to(dtype=self.dtype).reshape(
             B * T, FT, 2)  # (B * T, FT, 2)

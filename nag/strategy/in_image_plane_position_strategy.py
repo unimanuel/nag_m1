@@ -906,6 +906,27 @@ def compute_proto_plane_position_homography_new(
 
     keypoints = [list()] * T
     used_keypoints = [list()] * T
+    missing_match_data = torch.zeros(T, dtype=torch.bool, device=device)
+
+    def extract_match_data(entries, used_entries, entry_idx: int):
+        if entry_idx >= len(entries) or entry_idx >= len(used_entries):
+            return None, None
+        kp_entry = entries[entry_idx]
+        used_entry = used_entries[entry_idx]
+        if kp_entry is None or used_entry is None:
+            return None, None
+        if len(kp_entry) == 0 or len(used_entry) == 0:
+            return None, None
+        return kp_entry[0], used_entry[0]
+
+    def has_valid_match_data(kp_entry, used_entry) -> bool:
+        if kp_entry is None or used_entry is None:
+            return False
+        if len(kp_entry) != 2:
+            return False
+        if kp_entry[0] is None or kp_entry[1] is None:
+            return False
+        return len(used_entry) > 0 and np.any(used_entry)
 
     if post_filter.sum() > 1:
         filtered_images = images[post_filter]
@@ -919,8 +940,12 @@ def compute_proto_plane_position_homography_new(
         post_filter_wo_ref[reference_frame_idx] = False
 
         for entry, valid_idx in enumerate(post_filter_wo_ref.argwhere().squeeze(-1)):
-            keypoints[valid_idx] = k[entry][0]
-            used_keypoints[valid_idx] = used_points[entry][0]
+            kp_entry, used_entry = extract_match_data(k, used_points, entry)
+            if not has_valid_match_data(kp_entry, used_entry):
+                missing_match_data[valid_idx] = True
+                continue
+            keypoints[valid_idx] = kp_entry
+            used_keypoints[valid_idx] = used_entry
 
         H[post_filter_wo_ref] = tensorify(
             post[:, 0], dtype=dtype, device=device)
@@ -941,17 +966,21 @@ def compute_proto_plane_position_homography_new(
         pre_filter_wo_ref[reference_frame_idx] = False
 
         for entry, valid_idx in enumerate(pre_filter_wo_ref.argwhere().squeeze(-1)):
+            kp_entry, used_entry = extract_match_data(k, used_points, entry)
+            if not has_valid_match_data(kp_entry, used_entry):
+                missing_match_data[valid_idx] = True
+                continue
             # Reverse the keypoints so it looks like homography would go from 1 to 2.
-            keypoints[valid_idx] = k[entry][0][::-1]
-            used_keypoints[valid_idx] = used_points[entry][0][::-1]
+            keypoints[valid_idx] = kp_entry[::-1]
+            used_keypoints[valid_idx] = used_entry[::-1]
 
         H[pre_filter_wo_ref] = tensorify(pre[:, 0], dtype=dtype, device=device).flip(
             0).inverse()  # Flip back the homographies and invert so we mimic the same as the post filter
 
-    invalid_homographies = ~torch.isfinite(H).any(dim=(-1, -2))
+    invalid_homographies = ~torch.isfinite(H).all(dim=(-1, -2))
     H[invalid_homographies] = torch.eye(
         3, dtype=dtype, device=device).unsqueeze(0)
-    invalid_homographies = invalid_homographies | missing_in_frame
+    invalid_homographies = invalid_homographies | missing_in_frame | missing_match_data
 
     def mask_to_global(
             points: torch.Tensor,
@@ -1015,6 +1044,14 @@ def compute_proto_plane_position_homography_new(
             t=times[i - 1]).inverse() @ old_plane_estimate
 
         if invalid_homographies[i]:
+            tracked_points[i] = tracked_points[i - 1]
+            plane_G[i] = camera.get_global_position(
+                t=times[i]) @ old_plane_estimate_local
+            continue
+        if not has_valid_match_data(keypoints[i], used_keypoints[i]):
+            logger.warning(
+                f"Homography match data missing for frame {i}, skipping decomposition.")
+            invalid_homographies[i] = True
             tracked_points[i] = tracked_points[i - 1]
             plane_G[i] = camera.get_global_position(
                 t=times[i]) @ old_plane_estimate_local
@@ -1087,6 +1124,14 @@ def compute_proto_plane_position_homography_new(
             t=times[i + 1]).inverse() @ old_plane_estimate
 
         if invalid_homographies[i]:
+            tracked_points[i] = tracked_points[i + 1]
+            plane_G[i] = camera.get_global_position(
+                t=times[i]) @ old_plane_estimate_local
+            continue
+        if not has_valid_match_data(keypoints[i], used_keypoints[i]):
+            logger.warning(
+                f"Homography match data missing for frame {i}, skipping decomposition.")
+            invalid_homographies[i] = True
             tracked_points[i] = tracked_points[i + 1]
             plane_G[i] = camera.get_global_position(
                 t=times[i]) @ old_plane_estimate_local
