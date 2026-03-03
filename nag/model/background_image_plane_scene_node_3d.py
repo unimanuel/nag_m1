@@ -46,8 +46,11 @@ def default_control_point_times(
 class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappableSceneNode3D):
     """"Background image plane class with a neural field for color and flow, without learnable position parameter."""
 
-    TCNN_QUERY_CHUNK_SIZE = 131072
+    TCNN_QUERY_CHUNK_SIZE = 32768
     """Upper bound for per-call TCNN query rows to avoid unstable large CUTLASS matmuls."""
+
+    TCNN_QUERY_MIN_CHUNK_SIZE = 1024
+    """Lower bound for adaptive TCNN query retries before surfacing the original error."""
 
     encoding_image: tcnn.Encoding
     """The encoding for the image plane"""
@@ -316,19 +319,52 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
         very large contiguous hit set. Chunking avoids oversized TCNN/CUTLASS calls
         during inference-heavy renders such as initial output generation.
         """
-        if input_coords.shape[0] <= self.TCNN_QUERY_CHUNK_SIZE:
-            enc = encoding(input_coords)
+        def run_chunk(chunk: torch.Tensor) -> torch.Tensor:
+            enc = encoding(chunk)
             if apply_sin_epoch_mask:
                 enc = utils.mask(enc, sin_epoch)
             return network(enc)
 
-        out = []
-        for chunk in input_coords.split(self.TCNN_QUERY_CHUNK_SIZE, dim=0):
-            enc = encoding(chunk)
-            if apply_sin_epoch_mask:
-                enc = utils.mask(enc, sin_epoch)
-            out.append(network(enc))
-        return torch.cat(out, dim=0)
+        chunk_size = min(self.TCNN_QUERY_CHUNK_SIZE, input_coords.shape[0])
+        last_error = None
+
+        while chunk_size >= self.TCNN_QUERY_MIN_CHUNK_SIZE:
+            try:
+                if input_coords.shape[0] <= chunk_size:
+                    return run_chunk(input_coords)
+                out = []
+                for chunk in input_coords.split(chunk_size, dim=0):
+                    out.append(run_chunk(chunk))
+                return torch.cat(out, dim=0)
+            except RuntimeError as err:
+                err_msg = str(err)
+                is_tcnn_matmul_error = (
+                    "cutlass_matmul.h" in err_msg
+                    or "tiny-cuda-nn" in err_msg
+                    or "tinycudann" in err_msg
+                )
+                if not is_tcnn_matmul_error:
+                    raise
+                last_error = err
+                next_chunk_size = chunk_size // 2
+                if next_chunk_size < self.TCNN_QUERY_MIN_CHUNK_SIZE:
+                    break
+                logger.warning(
+                    f"TCNN query failed with chunk size {chunk_size}. Retrying with {next_chunk_size}.")
+                chunk_size = next_chunk_size
+
+        if input_coords.shape[0] <= self.TCNN_QUERY_MIN_CHUNK_SIZE:
+            return run_chunk(input_coords)
+
+        try:
+            out = []
+            for chunk in input_coords.split(self.TCNN_QUERY_MIN_CHUNK_SIZE, dim=0):
+                out.append(run_chunk(chunk))
+            return torch.cat(out, dim=0)
+        except RuntimeError:
+            if last_error is not None:
+                raise last_error
+            raise
 
     def get_rgb(self, uv: torch.Tensor, sin_epoch: torch.Tensor) -> torch.Tensor:
         """Get the RGB values for the given uv coordinates.

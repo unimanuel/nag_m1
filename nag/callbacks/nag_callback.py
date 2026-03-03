@@ -56,13 +56,15 @@ def generate_batched_outputs_and_save(
         progress_bar: bool = False,
         progress_factory: Optional[ProgressFactory] = None,
         disable_view_dependency: bool = False,
-        disable_camera_aberration: bool = False
+        disable_camera_aberration: bool = False,
+        disable_flow: bool = False,
 ) -> Union[List[str], Tuple[List[str], torch.Tensor]]:
     if save_format_path is None:
         save_format_path = os.path.join(model.config.output_path,
                                         "in_training",
                                         "{epoch:02d}_epoch_{t}_t_{idx}_idx_full.png")
     old_view_dependency_weights = dict()
+    old_flow_weights = dict()
     try:
         # If view dependency is disabled, we need to disable it
         if disable_view_dependency:
@@ -71,6 +73,11 @@ def generate_batched_outputs_and_save(
                     old_view_dependency_weights[o] = o.view_dependence_weight.detach(
                     ).clone()
                     o.view_dependence_weight[...] = 0.0
+        if disable_flow:
+            for o in model.objects:
+                if hasattr(o, "flow_weight") and isinstance(o.flow_weight, torch.Tensor):
+                    old_flow_weights[o] = o.flow_weight.detach().clone()
+                    o.flow_weight[...] = 0.0
         if disable_camera_aberration:
             for o in model.objects:
                 if isinstance(o, LearnedAberrationPlaneSceneNode3D):
@@ -125,6 +132,9 @@ def generate_batched_outputs_and_save(
         if disable_view_dependency:
             for o, w in old_view_dependency_weights.items():
                 o.view_dependence_weight[...] = w
+        if disable_flow:
+            for o, w in old_flow_weights.items():
+                o.flow_weight[...] = w
 
         if disable_camera_aberration:
             for o in model.objects:
@@ -931,9 +941,9 @@ class NAGCallback(pl.Callback):
                                              "complete",
                                              "{t}_t_{idx}_idx.png")
 
-        generated_initial_paths = generate_batched_outputs_and_save(
-            model,
-            resolution,
+        initial_kwargs = dict(
+            model=model,
+            resolution=resolution,
             t=tensorify(times, device=model.device),
             t_indices=t_indices,
             t_real_indices=t_real_indices,
@@ -941,8 +951,44 @@ class NAGCallback(pl.Callback):
             save_format_path=save_initial_fmt_path,
             return_images=self.config.initial_diff_plot,
             progress_bar=model.config.use_progress_bar,
-            progress_factory=model.config.progress_factory
+            progress_factory=model.config.progress_factory,
         )
+
+        def is_tcnn_matmul_error(err: BaseException) -> bool:
+            msg = str(err)
+            return (
+                "cutlass_matmul.h" in msg
+                or "tiny-cuda-nn" in msg
+                or "tinycudann" in msg
+            )
+
+        try:
+            generated_initial_paths = generate_batched_outputs_and_save(
+                **initial_kwargs
+            )
+        except RuntimeError as err:
+            if not is_tcnn_matmul_error(err):
+                raise
+            logging.warning(
+                "Initial render hit a tinycudann/CUTLASS error. Retrying with flow and view dependence disabled."
+            )
+            try:
+                retry_kwargs = dict(initial_kwargs)
+                retry_kwargs.update(
+                    batch_size=1,
+                    disable_view_dependency=True,
+                    disable_flow=True,
+                )
+                generated_initial_paths = generate_batched_outputs_and_save(
+                    **retry_kwargs
+                )
+            except RuntimeError as retry_err:
+                if not is_tcnn_matmul_error(retry_err):
+                    raise
+                logging.error(
+                    "Initial render still failed after disabling flow and view dependence. Skipping initial plot."
+                )
+                return
         gen_images = None
         if self.config.initial_diff_plot:
             generated_initial_paths, gen_images = generated_initial_paths

@@ -59,7 +59,7 @@ NAGConfig:
     - tools.metric.torch.psnr.PSNR
     - nag.loss.ssim.SSIM
   final_modalities_save: true
-  final_plot_resolution_factor: 1
+  final_plot_resolution_factor: 0.5
   final_plot_without_view_dependency: true
   frame_indices_filter:
     __class__: slice
@@ -100,7 +100,7 @@ NAGConfig:
   is_plane_translation_learnable: true
   is_waymo: false
   jit_enabled: true
-  learn_resolution_factor: 1
+  learn_resolution_factor: 0.5
   log_every_n_steps: 1
   log_gradient: false
   loss_kwargs:

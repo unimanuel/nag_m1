@@ -59,19 +59,19 @@ NAGConfig:
     - tools.metric.torch.psnr.PSNR
     - nag.loss.ssim.SSIM
   final_modalities_save: true
-  final_plot_resolution_factor: 1
+  final_plot_resolution_factor: 0.5
   final_plot_without_view_dependency: true
   frame_indices_filter:
     __class__: slice
-    start: 53
+    start: 2
     step: null
-    stop: 102
+    stop: 54
   grad_scaler_kwargs: {}
   has_background_plane: true
   has_camera_aberration_plane: false
   images_filename_pattern: (?P<index>[0-9]+)\.((png)|(jpg)|(jpeg))
   images_path: "{data_path}/images_undistorted"
-  in_training_checkpoint_interval: 5
+  in_training_checkpoint_interval: 20
   in_training_epoch_plot_interval: 5
   in_training_epoch_plot_log: true
   in_training_epoch_plot_log_l1: true
@@ -100,7 +100,7 @@ NAGConfig:
   is_plane_translation_learnable: true
   is_waymo: false
   jit_enabled: true
-  learn_resolution_factor: 1
+  learn_resolution_factor: 0.5
   log_every_n_steps: 1
   log_gradient: false
   loss_kwargs:
@@ -116,10 +116,10 @@ NAGConfig:
   masks_path: "{data_path}/masks"
   max_epochs: 80
   max_image_size: 2040
-  max_total_batch_size: 20000000.0
+  max_total_batch_size: 450000.0
   max_total_batch_size_inference: 40000000.0
   model_type: nag.model.nag_functional_model.NAGFunctionalModel
-  name: W141_53_101_large-undistorted
+  name: W141_2_53_large-undistorted
   new_homography: true
   normalize_camera: false
   num_batches: null
@@ -178,8 +178,8 @@ NAGConfig:
   reevaluate_output_path: false
   relative_plane_margin: 0.8
   sampler_kwargs:
-    num_batches: 467
-    num_rays: 30000
+    num_batches: 200
+    num_rays: 70000
     num_timestamps: 20
   sampler_type: nag.sampling.random_timed_uv_grid_sampler.RandomTimedUVGridSampler
   save_after_phase_change: true
