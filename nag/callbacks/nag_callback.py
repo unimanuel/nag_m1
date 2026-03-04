@@ -914,6 +914,48 @@ class NAGCallback(pl.Callback):
         config: NAGConfig = self.config
         return self._parse_metrics(config.final_mask_evaluation_metrics)
 
+    @staticmethod
+    def _is_tcnn_render_error(err: BaseException) -> bool:
+        msg = str(err)
+        return (
+            "cutlass_matmul.h" in msg
+            or "tiny-cuda-nn" in msg
+            or "tinycudann" in msg
+            or "gpu_memory.h" in msg
+            or "CUDA_ERROR_OUT_OF_MEMORY" in msg
+            or "CUDA_ERROR_INVALID_VALUE" in msg
+        )
+
+    def _generate_with_render_fallback(self,
+                                       base_kwargs: Dict[str, Any],
+                                       failure_label: str,
+                                       skip_on_failure: bool = True):
+        try:
+            return generate_batched_outputs_and_save(**base_kwargs)
+        except RuntimeError as err:
+            if not self._is_tcnn_render_error(err):
+                raise
+            logging.warning(
+                f"{failure_label} hit a tinycudann/CUTLASS error. Retrying with flow and view dependence disabled."
+            )
+            retry_kwargs = dict(base_kwargs)
+            retry_kwargs.update(
+                batch_size=1,
+                disable_view_dependency=True,
+                disable_flow=True,
+            )
+            try:
+                return generate_batched_outputs_and_save(**retry_kwargs)
+            except RuntimeError as retry_err:
+                if not self._is_tcnn_render_error(retry_err):
+                    raise
+                if not skip_on_failure:
+                    raise
+                logging.error(
+                    f"{failure_label} still failed after disabling flow and view dependence. Skipping render."
+                )
+                return None
+
     def save_initial(self, model: NAGModel):
         if not self.config.initial_plot:
             logging.info("Initial plot is disabled. Skipping.")
@@ -954,41 +996,13 @@ class NAGCallback(pl.Callback):
             progress_factory=model.config.progress_factory,
         )
 
-        def is_tcnn_matmul_error(err: BaseException) -> bool:
-            msg = str(err)
-            return (
-                "cutlass_matmul.h" in msg
-                or "tiny-cuda-nn" in msg
-                or "tinycudann" in msg
-            )
-
-        try:
-            generated_initial_paths = generate_batched_outputs_and_save(
-                **initial_kwargs
-            )
-        except RuntimeError as err:
-            if not is_tcnn_matmul_error(err):
-                raise
-            logging.warning(
-                "Initial render hit a tinycudann/CUTLASS error. Retrying with flow and view dependence disabled."
-            )
-            try:
-                retry_kwargs = dict(initial_kwargs)
-                retry_kwargs.update(
-                    batch_size=1,
-                    disable_view_dependency=True,
-                    disable_flow=True,
-                )
-                generated_initial_paths = generate_batched_outputs_and_save(
-                    **retry_kwargs
-                )
-            except RuntimeError as retry_err:
-                if not is_tcnn_matmul_error(retry_err):
-                    raise
-                logging.error(
-                    "Initial render still failed after disabling flow and view dependence. Skipping initial plot."
-                )
-                return
+        generated_initial_paths = self._generate_with_render_fallback(
+            initial_kwargs,
+            failure_label="Initial render",
+            skip_on_failure=True,
+        )
+        if generated_initial_paths is None:
+            return
         gen_images = None
         if self.config.initial_diff_plot:
             generated_initial_paths, gen_images = generated_initial_paths
@@ -1060,21 +1074,27 @@ class NAGCallback(pl.Callback):
                         order].tolist()
 
             if not exists:
-                generated_final_paths = generate_batched_outputs_and_save(
-                    model,
-                    resolution,
-                    t=tensorify(times, device=model.device),
-                    t_indices=t_indices,
-                    t_real_indices=t_real_indices,
-                    batch_size=5,
-                    save_format_path=save_final_fmt_path,
-                    return_images=self.config.final_diff_plot,
-                    progress_bar=model.config.use_progress_bar,
-                    progress_factory=model.config.progress_factory
+                generated_final_paths = self._generate_with_render_fallback(
+                    dict(
+                        model=model,
+                        resolution=resolution,
+                        t=tensorify(times, device=model.device),
+                        t_indices=t_indices,
+                        t_real_indices=t_real_indices,
+                        batch_size=5,
+                        save_format_path=save_final_fmt_path,
+                        return_images=self.config.final_diff_plot,
+                        progress_bar=model.config.use_progress_bar,
+                        progress_factory=model.config.progress_factory,
+                    ),
+                    failure_label="Final render",
+                    skip_on_failure=True,
                 )
+                if generated_final_paths is None:
+                    generate_final_images = False
 
             gen_images = None
-            if self.config.final_diff_plot:
+            if generate_final_images and self.config.final_diff_plot:
                 logging.info("Generating final diff images.")
                 generated_final_paths, gen_images = generated_final_paths
                 images = gen_images.permute(0, 2, 3, 1).detach().cpu().numpy()
@@ -1085,7 +1105,7 @@ class NAGCallback(pl.Callback):
                 self.generate_diff_images_and_save(
                     images, tensorify(times, device=model.device), t_indices, self.runner.dataset, save_to_disk=True, save_format_path=diff_save_path, log_in_logger=False)
 
-            if self.config.final_plot_without_view_dependency:
+            if generate_final_images and self.config.final_plot_without_view_dependency:
                 logging.info(
                     "Generating final images without view dependency.")
                 save_final_fmt_path_nv = os.path.join(model.config.output_path,
@@ -1093,42 +1113,50 @@ class NAGCallback(pl.Callback):
                                                       "complete_no_view_dependency",
                                                       "{t}_t.png")
 
-                generated_final_paths_nv = generate_batched_outputs_and_save(
-                    model,
-                    resolution,
-                    t=tensorify(times, device=model.device),
-                    t_indices=t_indices,
-                    t_real_indices=t_real_indices,
-                    batch_size=5,
-                    save_format_path=save_final_fmt_path_nv,
-                    return_images=False,
-                    progress_bar=model.config.use_progress_bar,
-                    progress_factory=model.config.progress_factory,
-                    disable_view_dependency=True
+                self._generate_with_render_fallback(
+                    dict(
+                        model=model,
+                        resolution=resolution,
+                        t=tensorify(times, device=model.device),
+                        t_indices=t_indices,
+                        t_real_indices=t_real_indices,
+                        batch_size=5,
+                        save_format_path=save_final_fmt_path_nv,
+                        return_images=False,
+                        progress_bar=model.config.use_progress_bar,
+                        progress_factory=model.config.progress_factory,
+                        disable_view_dependency=True,
+                    ),
+                    failure_label="Final render without view dependency",
+                    skip_on_failure=True,
                 )
 
-            if self.config.has_camera_aberration_plane:
+            if generate_final_images and self.config.has_camera_aberration_plane:
                 logging.info(
                     "Generating final images without camera aberration.")
                 save_final_fmt_path_abr = os.path.join(model.config.output_path,
                                                        "final",
                                                        "complete_no_aberration",
                                                        "{t}_t.png")
-                generated_final_paths_no_abrr = generate_batched_outputs_and_save(
-                    model,
-                    resolution,
-                    t=tensorify(times, device=model.device),
-                    t_indices=t_indices,
-                    t_real_indices=t_real_indices,
-                    batch_size=5,
-                    save_format_path=save_final_fmt_path_abr,
-                    return_images=False,
-                    progress_bar=model.config.use_progress_bar,
-                    progress_factory=model.config.progress_factory,
-                    disable_camera_aberration=True
+                self._generate_with_render_fallback(
+                    dict(
+                        model=model,
+                        resolution=resolution,
+                        t=tensorify(times, device=model.device),
+                        t_indices=t_indices,
+                        t_real_indices=t_real_indices,
+                        batch_size=5,
+                        save_format_path=save_final_fmt_path_abr,
+                        return_images=False,
+                        progress_bar=model.config.use_progress_bar,
+                        progress_factory=model.config.progress_factory,
+                        disable_camera_aberration=True,
+                    ),
+                    failure_label="Final render without camera aberration",
+                    skip_on_failure=True,
                 )
 
-        if evaluate_metrics:
+        if evaluate_metrics and generate_final_images and generated_final_paths is not None:
             logging.info("Evaluate final metrics.")
             metrics = self.parse_final_metrics()
             if len(metrics) > 0:
@@ -1173,7 +1201,7 @@ class NAGCallback(pl.Callback):
                                 tag, result[i].item(), step=i, epoch=model.current_epoch, batch=i)
                 self.save_tracker()
 
-        if evaluate_mask_metrics:
+        if evaluate_mask_metrics and generate_final_images and generated_final_paths is not None:
             logging.info("Evaluate mask final metrics.")
             metrics = self.parse_final_mask_metrics()
             if len(metrics) > 0:
@@ -1251,7 +1279,7 @@ class NAGCallback(pl.Callback):
 
         if self.config.save_video:
             logging.info("Saving videos.")
-            if generate_final_images:
+            if generate_final_images and generated_final_paths is not None:
                 try:
                     # Complete scene video
                     gen = load_image_stack_generator(
