@@ -161,6 +161,8 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         texel_dirs = equirect_uv_to_direction(sphere_uv, y_flip=y_flip)
         sphere_points = center.view(1, 1, 3) + texel_dirs * radius
 
+        # Only unmasked pixels are eligible to initialize the sphere texture.
+        # This excludes object regions so texels are selected from background only.
         background_mask = (masks.sum(dim=1, keepdim=True) == 0).to(images.dtype)
         if background_mask.shape[-2:] != images.shape[-2:]:
             background_mask = F.interpolate(
@@ -169,6 +171,8 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
                 mode="nearest",
             )
 
+        # If no frame ever contributes to a texel, fall back to a dataset-level
+        # background color prior instead of leaving the texel black.
         denom = background_mask.sum()
         if denom.item() < 1:
             fallback_rgb = images.mean(dim=(0, 2, 3))
@@ -190,6 +194,7 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
                 return_ok=True,
             )
             image_points = image_points[..., 0, :]
+            # Ignore projections that are outside the camera frustum or otherwise invalid.
             valid = valid[..., 0].to(dtype).unsqueeze(0)
 
             sample_grid = cls._project_points_to_grid(
@@ -201,9 +206,13 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             # per texel so the sphere init keeps sharper details instead of
             # blending across frames with different perspective/parallax.
             dist2 = sample_grid[0, ..., 0] ** 2 + sample_grid[0, ..., 1] ** 2
+            # Prefer samples nearer the image center, where distortion and edge artifacts
+            # are typically lower than near the border.
             center_weight = torch.exp(-dist2).unsqueeze(0)
             camera_position = camera.get_global_position(t=frame_time.unsqueeze(0))[0, :3, 3].to(dtype)
             view_dir = normalize(sphere_points - camera_position.view(1, 1, 3))
+            # Prefer views that look more head-on at the sphere texel. The texel normal
+            # is the sphere's radial direction at that texel center.
             incidence_weight = (view_dir * sphere_normals).sum(dim=-1).clamp_min(0.0).unsqueeze(0)
 
             sampled_rgb = F.grid_sample(
@@ -220,7 +229,10 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
                 padding_mode="zeros",
                 align_corners=align_corners,
             )[0]
+            # A frame can win a texel only if it lands on a background pixel, projects
+            # validly, stays near the image center, and views the texel front-facing.
             weight = sampled_bg * valid * center_weight * incidence_weight
+            # Keep the single highest-scoring frame for each texel instead of averaging.
             use_sample = weight > best_weight
             best_rgb = torch.where(use_sample.expand_as(best_rgb), sampled_rgb, best_rgb)
             best_weight = torch.where(use_sample, weight, best_weight)
