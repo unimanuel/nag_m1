@@ -11,6 +11,7 @@ from nag.model.learned_camera_scene_node_3d import LearnedCameraSceneNode3D
 from nag.model.learned_image_plane_scene_node_3d import LearnedImagePlaneSceneNode3D
 from nag.model.phase import Phase
 from nag.model.timed_plane_scene_node_3d import TimedPlaneSceneNode3D
+from nag.model.background_skybox_scene_node_3d import BackgroundSkyboxSceneNode3D, get_skybox_intersection_points
 from tools.util.typing import VEC_TYPE, NUMERICAL_TYPE
 from tools.util.torch import tensorify
 import torch
@@ -216,6 +217,27 @@ def get_object_information(
 
     # Intersection Points shape is (N, B, T, 3)
     # is_inside shape is (N, B, T)
+    
+    # background intersection for non-planar background
+    for i, obj in enumerate(objects):
+        if isinstance(obj, BackgroundSkyboxSceneNode3D):
+            center = global_plane_positions[i, :, :3, 3]  # (T,3)
+            radius = tensorify(obj.skybox_radius, dtype=global_ray_origins.dtype, device=global_ray_origins.device)
+            pts_BT, _, _, _ = get_skybox_intersection_points(
+                ray_directions=global_ray_directions,
+                center=center,
+                radius=radius,
+            )
+            hit_BT = torch.ones_like(is_inside[i], dtype=torch.bool)
+
+            intersection_points = torch.stack(
+                [pts_BT if j == i else intersection_points[j] for j in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if j == i else is_inside[j] for j in range(is_inside.shape[0])],
+                dim=0,
+            )
 
     colors = torch.zeros(
         (N, B, T, 3), device=global_ray_origins.device, dtype=global_ray_origins.dtype)

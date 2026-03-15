@@ -15,7 +15,7 @@ NAGConfig:
     network_flow_config: small
     network_image_config: small
     network_view_dependence_config: small
-  background_plane_type: nag.model.view_dependent_background_image_plane_scene_node_3d.ViewDependentBackgroundImagePlaneSceneNode3D
+  background_plane_type: nag.model.background_skybox_scene_node_3d.BackgroundSkyboxSceneNode3D
   background_relative_scale_margin: 0.5
   boxes_filename_pattern: (?P<index>[0-9]+).json
   boxes_object_id_mask_mapping_path: "{data_path}/box_id_mapping.json"
@@ -28,7 +28,7 @@ NAGConfig:
   camera_translation_offset_weight: 0.5
   checkpoint_path: null
   checkpoint_tracker_path: null
-  coarse_to_fine_end_epoch: 5
+  coarse_to_fine_end_epoch: 65
   coarse_to_fine_start_epoch: 0
   data_path: "{env:DATA_PATH}/waymo/segment-14133920963894906769"
   debug: false
@@ -111,9 +111,9 @@ NAGConfig:
   mask_indices_filter: null
   masks_filename_pattern: img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png
   masks_path: "{data_path}/masks"
-  max_epochs: 10
+  max_epochs: 80
   max_image_size: 2040
-  max_total_batch_size: 450000.0
+  max_total_batch_size: 500000.0
   max_total_batch_size_inference: 40000000.0
   model_type: nag.model.nag_functional_model.NAGFunctionalModel
   name: W141_53_101_small-undistorted

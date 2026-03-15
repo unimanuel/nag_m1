@@ -7,6 +7,7 @@ from matplotlib.figure import Figure
 from nag.config.nag_config import NAGConfig
 import torch
 from nag.model.background_plane_scene_node_3d import BackgroundPlaneSceneNode3D
+from nag.model.background_skybox_scene_node_3d import BackgroundSkyboxSceneNode3D, get_skybox_intersection_points, local_to_skybox_coordinates
 from nag.model.learned_camera_scene_node_3d import LearnedCameraSceneNode3D
 from nag.model.nag_model import NAGModel, compute_object_rgba, get_object_intersection_points, undo_intersection_ordering
 from tools.logger.logging import logger
@@ -712,7 +713,7 @@ class NAGFunctionalModel(NAGModel):
             camera_aberration_translation=self._camera_aberration_translation
         )
 
-        global_ray_origins, global_ray_directions, _, OB_mask, intersection_points, is_inside, plane_p, plane_n = plane_hits(
+        global_ray_origins, global_ray_directions, global_object_positions, OB_mask, intersection_points, is_inside, plane_p, plane_n = plane_hits(
             uv=uv,
             inverse_intrinsics=self.camera.get_inverse_intrinsics(t),
             lens_distortion=self.camera.get_lens_distortion(),
@@ -722,6 +723,41 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale=local_plane_scale,
             local_plane_scale_offset=local_plane_scale_offset,
         )
+
+        # background intersection for non-planar background
+        # (overwrites the nonsense intersection calculated by plane_hits for the background object)
+        bg_i = next((i for i, o in enumerate(objects) if isinstance(o, BackgroundSkyboxSceneNode3D)), None)
+        if has_background and bg_i is not None:
+            bg_T = global_object_positions[bg_i]  # (T,4,4)
+            center = bg_T[:, :3, 3]  # (T,3)
+
+            intersections_BG, hit_side_BG, planes_BG, normals_BG = get_skybox_intersection_points(
+                ray_directions=global_ray_directions,
+                center=center,
+                radius=objects[bg_i].skybox_radius
+            )
+            hit_BG = torch.ones_like(is_inside[bg_i], dtype=torch.bool)
+
+            intersection_points = torch.stack(
+                [intersections_BG if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BG if i == bg_i else is_inside[i] for i in range(is_inside.shape[0])],
+                dim=0,
+            )
+
+            # Provide per-ray reference points/normals for gradient hooks.
+            if plane_p is not None and plane_n is not None:
+                plane_p = torch.stack(
+                    [planes_BG if i == bg_i else plane_p[i] for i in range(plane_p.shape[0])],
+                    dim=0,
+                )
+                plane_n = torch.stack(
+                    [normals_BG if i == bg_i else plane_n[i] for i in range(plane_n.shape[0])],
+                    dim=0,
+                )
+
 
         global_plane_positions = global_positions[OB_mask]
 
@@ -1298,6 +1334,28 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale_offset=local_plane_scale_offset,
         )
 
+        # background intersection for non-planar background
+        bg_i = next((i for i, o in enumerate(objects) if isinstance(o, BackgroundSkyboxSceneNode3D)), None)
+        if bg_i is not None:
+            bg_T = global_positions[OB_mask][bg_i]
+            center_T = bg_T[:, :3, 3]
+            
+            pts_BT, _, _, _ = get_skybox_intersection_points(
+                ray_directions=global_ray_directions,
+                center=center_T.to(uv.dtype),
+                radius=objects[bg_i].skybox_radius
+            )
+            hit_BT = torch.ones_like(is_inside[bg_i], dtype=torch.bool)
+
+            intersection_points = torch.stack(
+                [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if i == bg_i else is_inside[i] for i in range(is_inside.shape[0])],
+                dim=0,
+            )
+        
         global_plane_positions = global_positions[OB_mask]
 
         colors = torch.zeros(
@@ -1305,10 +1363,17 @@ class NAGFunctionalModel(NAGModel):
         alphas = torch.zeros(
             (OBA, B, T, 1), device=uv.device, dtype=uv.dtype)
 
-        local_intersection_points = global_to_local(global_plane_positions, intersection_points.permute(1, 0, 2, 3).reshape(
-            B, OBA * T, -1), v_include_time=True).reshape(B, OBA, T, -1).permute(1, 0, 2, 3)[..., :2]  # Shape (OBA, B, T, 2)
+        local_intersection_points_full = global_to_local(global_plane_positions, intersection_points.permute(1, 0, 2, 3).reshape(
+            B, OBA * T, -1), v_include_time=True).reshape(B, OBA, T, -1).permute(1, 0, 2, 3)[..., :3]  # Shape (OBA, B, T, 3)
+        local_intersection_points = local_intersection_points_full[..., :2]  # Shape (OBA, B, T, 2)
         plane_intersection_points = batched_local_to_plane_coordinates(local_intersection_points.reshape(
             OBA, B * T, -1).permute(1, 0, 2), local_plane_scale, local_plane_scale_offset).permute(1, 0, 2).reshape(OBA, B, T, -1)
+
+        if bg_i is not None:
+            plane_intersection_points[bg_i] = local_to_skybox_coordinates(
+                local_intersection_points_full[bg_i].reshape(B * T, -1),
+                objects[bg_i].skybox_radius
+            ).reshape(B, T, -1)
 
         if context is not None:
             # Add to debug context
@@ -1414,6 +1479,28 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale_offset=local_plane_scale_offset,
         )
 
+        # background intersection for non-planar background
+        bg_i = next((i for i, o in enumerate(objects) if isinstance(o, BackgroundSkyboxSceneNode3D)), None)
+        if bg_i is not None:
+            bg_T = global_positions[OB_mask][bg_i]
+            center_T = bg_T[:, :3, 3]
+
+            pts_BT, _, _, _ = get_skybox_intersection_points(
+                ray_directions=global_ray_directions,
+                center=center_T.to(uv.dtype),
+                radius=objects[bg_i].skybox_radius
+            )
+            hit_BT = torch.ones_like(is_inside[bg_i], dtype=torch.bool)
+
+            intersection_points = torch.stack(
+                [pts_BT if i == bg_i else intersection_points[i] for i in range(intersection_points.shape[0])],
+                dim=0,
+            )
+            is_inside = torch.stack(
+                [hit_BT if i == bg_i else is_inside[i] for i in range(is_inside.shape[0])],
+                dim=0,
+            )
+
         global_plane_positions = global_positions[OB_mask]
 
         colors, alphas, flows = None, None, None
@@ -1428,10 +1515,18 @@ class NAGFunctionalModel(NAGModel):
             flows = torch.zeros(
                 (OB, B, T, 2), device=uv.device, dtype=uv.dtype)
 
-        local_intersection_points = global_to_local(global_plane_positions, intersection_points.permute(1, 0, 2, 3).reshape(
-            B, OB * T, -1), v_include_time=True).reshape(B, OB, T, -1).permute(1, 0, 2, 3)[..., :2]  # Shape (OB, B, T, 2)
+        local_intersection_points_full = global_to_local(global_plane_positions, intersection_points.permute(1, 0, 2, 3).reshape(
+            B, OB * T, -1), v_include_time=True).reshape(B, OB, T, -1).permute(1, 0, 2, 3)[..., :3]  # Shape (OB, B, T, 3)
+        local_intersection_points = local_intersection_points_full[..., :2]  # Shape (OB, B, T, 2)
         plane_intersection_points = batched_local_to_plane_coordinates(local_intersection_points.reshape(
             OB, B * T, -1).permute(1, 0, 2), local_plane_scale, local_plane_scale_offset).permute(1, 0, 2).reshape(OB, B, T, -1)
+        
+        if bg_i is not None:
+            # For skybox, we need to compute the plane coordinates differently
+            plane_intersection_points[bg_i] = local_to_skybox_coordinates(
+                local_intersection_points_full[bg_i].reshape(B * T, -1),
+                objects[bg_i].skybox_radius
+                ).reshape(B, T, -1)
 
         ray_global_target = global_ray_origins + global_ray_directions
 
