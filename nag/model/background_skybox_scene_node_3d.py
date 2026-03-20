@@ -185,6 +185,39 @@ def local_to_skybox_coordinates(
     return unflatten_batch_dims(res, batch_shape)
 
 
+def atlas_to_face_coordinates(atlas_uv: torch.Tensor) -> torch.Tensor:
+    """Converts 2D skybox atlas coordinates to 3D per-face coordinates.
+
+    This reverses the atlas packing done by local_to_skybox_coordinates,
+    producing per-face UV coordinates plus a normalized face ID.  Feeding
+    these 3 values into a 3-input-dim hash grid encoding keeps each cube
+    face in its own region of the encoding space, preventing cross-face
+    hash collisions that cause blurriness.
+
+    Parameters
+    ----------
+    atlas_uv : torch.Tensor
+        Atlas UV coordinates in [0, 1]². Shape: (..., 2)
+
+    Returns
+    -------
+    torch.Tensor
+        Per-face coordinates in [0, 1]³. Shape: (..., 3)
+        [face_u, face_v, face_id / 5]
+    """
+    u = atlas_uv[..., 0]
+    v = atlas_uv[..., 1]
+
+    face_col = (u * 3.0).floor().clamp(0, 2)
+    face_row = (v * 2.0).floor().clamp(0, 1)
+
+    face_u = (u * 3.0 - face_col).clamp(0.0, 1.0)
+    face_v = (v * 2.0 - face_row).clamp(0.0, 1.0)
+    face_id_norm = (face_col + 3.0 * face_row) / 5.0
+
+    return torch.stack([face_u, face_v, face_id_norm], dim=-1)
+
+
 class BackgroundSkyboxSceneNode3D(BackgroundImagePlaneSceneNode3D):
     """Skybox background using an image atlas for the 6 sides.
     
@@ -205,12 +238,143 @@ class BackgroundSkyboxSceneNode3D(BackgroundImagePlaneSceneNode3D):
         radius: Union[float, torch.Tensor] = 1000.0,
         **kwargs
     ):
+        encoding_image_config = kwargs.get('encoding_image_config', 'small')
+        proxy_init = kwargs.get('proxy_init', False)
+
+        # During parent init, estimate_rgb_scaling calls self.get_rgb().
+        # Keep skybox-specific 3D sampling disabled until we replace the
+        # parent's temporary 2D encoding with the skybox 3D encoding.
+        self._skybox_encoding_ready = False
+
         super().__init__(
             **kwargs
         )
-        
+
         # Skybox radius
         self.register_buffer("skybox_radius", tensorify(radius, dtype=self.dtype))
+
+        # Replace the parent's 2D image encoding with a 3D one
+        # (face_u, face_v, face_id_normalized).  This prevents the hash
+        # grid from bleeding across skybox face boundaries.
+        enc_config = EncodingConfig.parse(encoding_image_config).to_dict()
+        enc_config["log2_hashmap_size"] = enc_config.get("log2_hashmap_size", 13) + 3
+        self.encoding_image = tcnn.Encoding(
+            n_input_dims=3,
+            encoding_config=enc_config,
+            dtype=self.network_dtype,
+        )
+        self._skybox_encoding_ready = True
+
+        # Re-estimate the RGB normalization for the new encoding
+        if self.rgb_rescaling and not proxy_init:
+            self.rgb_normalization = MeanStd(dim=0, mean=0, std=DEFAULT)
+            self.estimate_rgb_scaling(self.rgb_normalization)
+
+    def init_initial_rgb(
+        self,
+        dtype: torch.dtype,
+        initial_rgb: Optional[torch.Tensor] = None,
+        initial_rgb_variance: Optional[torch.Tensor] = None,
+        mean_rgb_variance: Optional[torch.Tensor] = None,
+    ):
+        super().init_initial_rgb(
+            dtype, initial_rgb,
+            initial_rgb_variance=initial_rgb_variance,
+            mean_rgb_variance=mean_rgb_variance,
+        )
+        # Split the 3×2 atlas into 6 separate face textures so that
+        # get_initial_rgb can sample each face independently, avoiding
+        # bilinear bleed across face boundaries in grid_sample.
+        if initial_rgb is not None and initial_rgb.dim() == 3:
+            C, H, W = initial_rgb.shape
+            h, w = H // 2, W // 3
+            faces = []
+            for row in range(2):
+                for col in range(3):
+                    faces.append(
+                        initial_rgb[:, row * h:(row + 1) * h,
+                                    col * w:(col + 1) * w].clone()
+                    )
+            self.register_buffer(
+                "initial_rgb_faces", torch.stack(faces))  # (6, C, h, w)
+        else:
+            self.register_buffer(
+                "initial_rgb_faces",
+                torch.zeros(6, 3, 1, 1, dtype=dtype))
+
+    def get_initial_rgb(self, uv: torch.Tensor) -> torch.Tensor:
+        """Per-face initial-RGB sampling without cross-face bleeding.
+
+        Parameters
+        ----------
+        uv : torch.Tensor
+            Atlas UV coordinates. Shape (B, 2), range [-0.5, 0.5].
+
+        Returns
+        -------
+        torch.Tensor
+            RGB values. Shape (B, 3).
+        """
+        atlas_uv = uv + 0.5  # [0, 1]²
+
+        face_col = (atlas_uv[..., 0] * 3.0).floor().clamp(0, 2).long()
+        face_row = (atlas_uv[..., 1] * 2.0).floor().clamp(0, 1).long()
+        face_id = face_col + 3 * face_row  # 0-5
+
+        face_u = (atlas_uv[..., 0] * 3.0 - face_col.float()).clamp(0.0, 1.0)
+        face_v = (atlas_uv[..., 1] * 2.0 - face_row.float()).clamp(0.0, 1.0)
+
+        # grid_sample expects [-1, 1]
+        grid = torch.stack([face_u * 2.0 - 1.0,
+                            face_v * 2.0 - 1.0], dim=-1)  # (B, 2)
+
+        out = torch.zeros(uv.shape[0], 3, device=uv.device, dtype=self.dtype)
+        for fid in range(6):
+            mask = face_id == fid
+            if not mask.any():
+                continue
+            face_grid = grid[mask][None, None, ...]  # (1, 1, N, 2)
+            sampled = F.grid_sample(
+                self.initial_rgb_faces[fid:fid + 1],  # (1, 3, h, w)
+                face_grid,
+                mode="bilinear",
+                padding_mode="border",
+                align_corners=self.align_corners,
+            )[0, :, 0, :].permute(1, 0)  # (N, 3)
+            out[mask] = sampled
+        return out
+
+    def get_rgb(self, uv: torch.Tensor, sin_epoch: torch.Tensor) -> torch.Tensor:
+        """Get RGB via 3D face-coordinate encoding.
+
+        Parameters
+        ----------
+        uv : torch.Tensor
+            Atlas UV coordinates. Shape (B, 2), range [-0.5, 0.5].
+        sin_epoch : torch.Tensor
+            Training progress marker.
+
+        Returns
+        -------
+        torch.Tensor
+            Network RGB prediction. Shape (B, 3).
+        """
+        if not getattr(self, "_skybox_encoding_ready", False):
+            return super().get_rgb(uv, sin_epoch)
+
+        atlas_uv = uv + 0.5  # [0, 1]²
+        face_coords = atlas_to_face_coordinates(atlas_uv)  # [0, 1]³
+
+        with torch.autocast(device_type='cuda', dtype=self.network_dtype):
+            enc = self.encoding_image(face_coords)
+            if self.coarse_to_fine_color:
+                enc = utils.mask(enc, sin_epoch)
+            network_rgb = self.network_image(enc)
+
+        network_rgb = network_rgb.to(dtype=self.dtype)
+        if self.rgb_rescaling and self.rgb_normalization.fitted:
+            network_rgb = self.rgb_normalization(network_rgb)
+        return network_rgb
 
     @classmethod
     def _project_color_to_skybox_atlas(
@@ -406,49 +570,7 @@ class BackgroundSkyboxSceneNode3D(BackgroundImagePlaneSceneNode3D):
                 context: Optional[Dict[str, Any]] = None,
                 **kwargs
                 ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass for the plane.
-
-        Parameters
-        ----------
-        uv : torch.Tensor
-            The intersection points / query points of the rays with the plane.
-            In global coordinates.
-            Shape: (B, T, 3)
-        ray_origins : torch.Tensor
-            The ray origins of the rays.
-            Shape: (B, T, 3)
-        ray_directions : torch.Tensor
-            The ray directions of the rays.
-            Shape: (B, T, 3)
-        t : torch.Tensor
-            The time of the intersection.
-            Shape: (T, )
-        sin_epoch : torch.Tensor
-            The sine of the epoch.
-            Tends towards 1 at the end of the epoch and towards -1 at the beginning of the epoch.
-
-        uv_in_plane_space : bool
-            If the uv coordinates are in plane space. If True, the uv coordinates are assumend in the range [0, 1].
-
-        global_position : Optional[torch.Tensor]
-            The global position of the plane.
-            If None, the global position of the plane is computed from the position and orientation of the plane.
-            Can be supplied to avoid recomputing the global position. Shape: (T, 4, 4)
-
-        plane_scale : Optional[torch.Tensor]
-            The scale of the plane. If None, the scale in the object is used.
-            Can be supplied to reduce overhead. Shape: (2, ) (x, y)
-
-        plane_scale_offset : Optional[torch.Tensor]
-            The offset of the plane scale. If None, the offset in the object is used.
-            Can be supplied to reduce overhead. Shape: (2, ) (x, y)
-
-        Returns
-        -------
-        Tuple[torch.Tensor, torch.Tensor]
-            1. The RGB values of the plane. Shape: (B, T, 3)
-            2. The alpha values of the plane. Shape: (B, T, 1)
-        """
+        
         B, T = uv.shape[:2]
 
         if uv.numel() == 0:
