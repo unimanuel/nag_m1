@@ -815,10 +815,14 @@ def get_plane_support_points(
             plane_support_points[:, i, :] = 0.
             continue
 
-        painted_mask = torch.zeros(mask[i, 0].shape, dtype=torch.bool, device=device).unsqueeze(
+        # Kornia draws via in-place mul/add, so target image must be numeric (not bool).
+        painted_mask = torch.zeros(mask[i, 0].shape, dtype=dtype, device=device).unsqueeze(
             0).unsqueeze(0).repeat(3, 1, 1, 1)
-        painted_mask = draw_convex_polygon(painted_mask, points[:, :, i], colors=torch.tensor(
-            1, dtype=dtype, device=device).unsqueeze(0).unsqueeze(0).repeat(3, 1)).bool()
+        painted_mask = draw_convex_polygon(
+            painted_mask,
+            points[:, :, i],
+            colors=torch.ones((3, 1), dtype=dtype, device=device),
+        ).bool()
         # Check if depeth select mask is part of the mask
         depth_select_mask = painted_mask & mask[i].unsqueeze(0)
         mask_depths = depths[i, 0, mask[i, 0]]
