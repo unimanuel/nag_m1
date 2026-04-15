@@ -46,6 +46,12 @@ def default_control_point_times(
 class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappableSceneNode3D):
     """"Background image plane class with a neural field for color and flow, without learnable position parameter."""
 
+    TCNN_QUERY_CHUNK_SIZE = 32768
+    """Upper bound for per-call TCNN query rows to avoid unstable large CUTLASS matmuls."""
+
+    TCNN_QUERY_MIN_CHUNK_SIZE = 1024
+    """Lower bound for adaptive TCNN query retries before surfacing the original error."""
+
     encoding_image: tcnn.Encoding
     """The encoding for the image plane"""
 
@@ -301,6 +307,65 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
 
     # region Forward
 
+    def _run_tcnn_network(self,
+                          input_coords: torch.Tensor,
+                          encoding: tcnn.Encoding,
+                          network: tcnn.Network,
+                          sin_epoch: torch.Tensor,
+                          apply_sin_epoch_mask: bool = True) -> torch.Tensor:
+        """Evaluate a TCNN encoding/network pair in smaller chunks.
+
+        The global sampler limits total rays, but a single object can still receive a
+        very large contiguous hit set. Chunking avoids oversized TCNN/CUTLASS calls
+        during inference-heavy renders such as initial output generation.
+        """
+        def run_chunk(chunk: torch.Tensor) -> torch.Tensor:
+            enc = encoding(chunk)
+            if apply_sin_epoch_mask:
+                enc = utils.mask(enc, sin_epoch)
+            return network(enc)
+
+        chunk_size = min(self.TCNN_QUERY_CHUNK_SIZE, input_coords.shape[0])
+        last_error = None
+
+        while chunk_size >= self.TCNN_QUERY_MIN_CHUNK_SIZE:
+            try:
+                if input_coords.shape[0] <= chunk_size:
+                    return run_chunk(input_coords)
+                out = []
+                for chunk in input_coords.split(chunk_size, dim=0):
+                    out.append(run_chunk(chunk))
+                return torch.cat(out, dim=0)
+            except RuntimeError as err:
+                err_msg = str(err)
+                is_tcnn_matmul_error = (
+                    "cutlass_matmul.h" in err_msg
+                    or "tiny-cuda-nn" in err_msg
+                    or "tinycudann" in err_msg
+                )
+                if not is_tcnn_matmul_error:
+                    raise
+                last_error = err
+                next_chunk_size = chunk_size // 2
+                if next_chunk_size < self.TCNN_QUERY_MIN_CHUNK_SIZE:
+                    break
+                logger.warning(
+                    f"TCNN query failed with chunk size {chunk_size}. Retrying with {next_chunk_size}.")
+                chunk_size = next_chunk_size
+
+        if input_coords.shape[0] <= self.TCNN_QUERY_MIN_CHUNK_SIZE:
+            return run_chunk(input_coords)
+
+        try:
+            out = []
+            for chunk in input_coords.split(self.TCNN_QUERY_MIN_CHUNK_SIZE, dim=0):
+                out.append(run_chunk(chunk))
+            return torch.cat(out, dim=0)
+        except RuntimeError:
+            if last_error is not None:
+                raise last_error
+            raise
+
     def get_rgb(self, uv: torch.Tensor, sin_epoch: torch.Tensor) -> torch.Tensor:
         """Get the RGB values for the given uv coordinates.
 
@@ -322,10 +387,12 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
             query_points = query_points + 0.5
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            enc = self.encoding_image(query_points)
-            if self.coarse_to_fine_color:
-                enc = utils.mask(enc, sin_epoch)
-            network_rgb = self.network_image(enc)
+            network_rgb = self._run_tcnn_network(
+                query_points,
+                self.encoding_image,
+                self.network_image,
+                sin_epoch,
+                apply_sin_epoch_mask=self.coarse_to_fine_color)
         network_rgb = network_rgb.to(dtype=self.dtype)
         if self.rgb_rescaling and self.rgb_normalization.fitted:
             network_rgb = self.rgb_normalization(network_rgb)
@@ -356,8 +423,11 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
             uv_reference_frame = uv_reference_frame + 0.5
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow = self.network_flow(utils.mask(
-                self.encoding_flow(uv_reference_frame), sin_epoch))  # (B, 2)
+            flow = self._run_tcnn_network(
+                uv_reference_frame,
+                self.encoding_flow,
+                self.network_flow,
+                sin_epoch)  # (B, 2)
         flow = flow.to(dtype=self.dtype)
 
         flow = flow.reshape(-1, self.num_flow_control_points, 2)  # (B, FT, 2)
@@ -454,8 +524,11 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
         input_coords = input_coords.reshape(B * T, 2)
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow_points = self.network_flow(utils.mask(
-                self.encoding_flow(input_coords), sin_epoch))  # (B * T, 2)
+            flow_points = self._run_tcnn_network(
+                input_coords,
+                self.encoding_flow,
+                self.network_flow,
+                sin_epoch)  # (B * T, 2)
 
         flow_points = flow_points.to(dtype=self.dtype).reshape(
             B * T, FT, 2)  # (B * T, FT, 2)

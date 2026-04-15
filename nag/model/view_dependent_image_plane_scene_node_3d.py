@@ -200,8 +200,11 @@ class ViewDependentImagePlaneSceneNode3D(
             return torch.zeros((B, T, 4), dtype=self.dtype, device=uv.device)
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            view_dependence = self.network_view_dependence(utils.mask(
-                self.encoding_view_dependence(input_coords), sin_epoch))  # (B, 2)
+            view_dependence = self._run_tcnn_network(
+                input_coords,
+                self.encoding_view_dependence,
+                self.network_view_dependence,
+                sin_epoch)  # (B, 2)
 
         view_dependence = view_dependence.to(dtype=self.dtype)
 

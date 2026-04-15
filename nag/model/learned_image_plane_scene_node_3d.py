@@ -22,10 +22,10 @@ from nag.transforms.transforms_timed_3d import interpolate_vector, linear_interp
 from tools.viz.matplotlib import plot_mask, plot_as_image
 from tools.util.numpy import numpyify
 from nag.utils import utils
+from tools.logger.logging import logger
 try:
     import tinycudann as tcnn
 except (ModuleNotFoundError, OSError) as err:
-    from tools.logger.logging import logger
     from tools.util.mock_import import MockImport
     if not TYPE_CHECKING:
         logger.warning(f"Could not import tinycudann: {err}")
@@ -139,6 +139,12 @@ class LearnedImagePlaneSceneNode3D(
 
     network_dtype: torch.dtype
     """The dtype for the network."""
+
+    TCNN_QUERY_CHUNK_SIZE = 16384
+    """Default TCNN chunk size for learned planes during training/inference."""
+
+    TCNN_QUERY_MIN_CHUNK_SIZE = 256
+    """Smallest retry chunk size before surfacing a TCNN OOM/matmul error."""
 
     indenpendent_rgba_flow: bool
     """If True, the flow is computed independently for RGB and alpha. If False, the flow is computed jointly for RGB and alpha."""
@@ -832,6 +838,68 @@ class LearnedImagePlaneSceneNode3D(
 
         return rgb, alpha, flow
 
+    def _run_tcnn_network(self,
+                          input_coords: torch.Tensor,
+                          encoding: tcnn.Encoding,
+                          network: tcnn.Network,
+                          sin_epoch: torch.Tensor,
+                          apply_sin_epoch_mask: bool = True) -> torch.Tensor:
+        """Evaluate a TCNN encoding/network pair with adaptive chunking.
+
+        Foreground planes can receive a large per-object hit set even when the global
+        sampler obeys `max_total_batch_size`. Chunking keeps per-network TCNN calls
+        inside a memory envelope that the current CUDA/tinycudann build can handle.
+        """
+
+        def run_chunk(chunk: torch.Tensor) -> torch.Tensor:
+            enc = encoding(chunk)
+            if apply_sin_epoch_mask:
+                enc = utils.mask(enc, sin_epoch)
+            return network(enc)
+
+        chunk_size = min(self.TCNN_QUERY_CHUNK_SIZE, input_coords.shape[0])
+        last_error = None
+
+        while chunk_size >= self.TCNN_QUERY_MIN_CHUNK_SIZE:
+            try:
+                if input_coords.shape[0] <= chunk_size:
+                    return run_chunk(input_coords)
+                out = []
+                for chunk in input_coords.split(chunk_size, dim=0):
+                    out.append(run_chunk(chunk))
+                return torch.cat(out, dim=0)
+            except RuntimeError as err:
+                err_msg = str(err)
+                is_tcnn_error = (
+                    "cutlass_matmul.h" in err_msg
+                    or "gpu_memory.h" in err_msg
+                    or "tiny-cuda-nn" in err_msg
+                    or "tinycudann" in err_msg
+                    or "CUDA_ERROR_OUT_OF_MEMORY" in err_msg
+                )
+                if not is_tcnn_error:
+                    raise
+                last_error = err
+                next_chunk_size = chunk_size // 2
+                if next_chunk_size < self.TCNN_QUERY_MIN_CHUNK_SIZE:
+                    break
+                logger.warning(
+                    f"TCNN query failed with chunk size {chunk_size}. Retrying with {next_chunk_size}.")
+                chunk_size = next_chunk_size
+
+        if input_coords.shape[0] <= self.TCNN_QUERY_MIN_CHUNK_SIZE:
+            return run_chunk(input_coords)
+
+        try:
+            out = []
+            for chunk in input_coords.split(self.TCNN_QUERY_MIN_CHUNK_SIZE, dim=0):
+                out.append(run_chunk(chunk))
+            return torch.cat(out, dim=0)
+        except RuntimeError:
+            if last_error is not None:
+                raise last_error
+            raise
+
     def get_rgb(self, uv: torch.Tensor, sin_epoch: torch.Tensor, **kwargs) -> torch.Tensor:
         """Get the RGB values for the given uv coordinates.
 
@@ -851,10 +919,12 @@ class LearnedImagePlaneSceneNode3D(
         if not self.legacy_model_inputs:
             query_points = query_points + 0.5
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            enc = self.encoding_image(query_points)
-            if self.coarse_to_fine_color:
-                enc = utils.mask(enc, sin_epoch)
-            network_rgb = self.network_image(enc)
+            network_rgb = self._run_tcnn_network(
+                query_points,
+                self.encoding_image,
+                self.network_image,
+                sin_epoch,
+                apply_sin_epoch_mask=self.coarse_to_fine_color)
 
         network_rgb = network_rgb.to(dtype=self.dtype)
         if self.rgb_rescaling and self.rgb_normalization.fitted:
@@ -884,10 +954,12 @@ class LearnedImagePlaneSceneNode3D(
         if not self.legacy_model_inputs:
             query_points = query_points + 0.5
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            enc = self.encoding_alpha(query_points)
-            if self.coarse_to_fine_alpha:
-                enc = utils.mask(enc, sin_epoch)
-            network_alpha = self.network_alpha(enc)
+            network_alpha = self._run_tcnn_network(
+                query_points,
+                self.encoding_alpha,
+                self.network_alpha,
+                sin_epoch,
+                apply_sin_epoch_mask=self.coarse_to_fine_alpha)
         network_alpha = network_alpha.to(dtype=self.dtype)
 
         if self.alpha_rescaling and self.alpha_normalization.fitted:
@@ -919,8 +991,11 @@ class LearnedImagePlaneSceneNode3D(
             uv_reference_frame = uv_reference_frame + 0.5
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow = self.network_flow(utils.mask(
-                self.encoding_flow(uv_reference_frame), sin_epoch))  # (B, 2)
+            flow = self._run_tcnn_network(
+                uv_reference_frame,
+                self.encoding_flow,
+                self.network_flow,
+                sin_epoch)  # (B, 2)
         flow = flow.to(dtype=self.dtype)
 
         flow = flow.reshape(-1, self.num_flow_control_points, 2)  # (B, FT, 2)
@@ -956,8 +1031,11 @@ class LearnedImagePlaneSceneNode3D(
         input_coords = input_coords.reshape(B * T, 2)
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow_points = self.network_flow(utils.mask(
-                self.encoding_flow(input_coords), sin_epoch))  # (B * T, 2)
+            flow_points = self._run_tcnn_network(
+                input_coords,
+                self.encoding_flow,
+                self.network_flow,
+                sin_epoch)  # (B * T, 2)
 
         flow_points = flow_points.to(dtype=self.dtype).reshape(
             B * T, FT, 2)  # (B * T, FT, 2)
@@ -1094,8 +1172,11 @@ class LearnedImagePlaneSceneNode3D(
         input_coords = input_coords.reshape(B * T, 2)
 
         with torch.autocast(device_type='cuda', dtype=self.network_dtype):
-            flow_points = self.network_flow_alpha(utils.mask(
-                self.encoding_flow_alpha(input_coords), sin_epoch))  # (B * T, 2)
+            flow_points = self._run_tcnn_network(
+                input_coords,
+                self.encoding_flow_alpha,
+                self.network_flow_alpha,
+                sin_epoch)  # (B * T, 2)
 
         flow_points = flow_points.to(dtype=self.dtype).reshape(
             B * T, FT, 2)  # (B * T, FT, 2)
