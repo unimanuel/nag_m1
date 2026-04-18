@@ -879,6 +879,20 @@ def compute_proto_plane_position_homography_new(
         The homography finder.
 
     """
+    # `find_homography_mask_wise` may return NaN-filled matrices when matching fails,
+    # but it can also return finite yet non-invertible 3x3 matrices. The latter case
+    # is what triggered the singular `torch.linalg.inv(...)` crash for one Waymo split:
+    # the matrix looked numerically valid until inversion time. We therefore treat both
+    # non-finite and near-zero-determinant homographies as invalid before they ever get
+    # assigned into `H` or inverted in the backward-tracking path.
+    def find_invalid_homographies(homographies: torch.Tensor, det_eps: float = 1e-8) -> torch.Tensor:
+        finite = torch.isfinite(homographies).all(dim=(-1, -2))
+        invalid = ~finite
+        if finite.any():
+            det = torch.linalg.det(homographies[finite])
+            invalid[finite] = ~torch.isfinite(det) | (det.abs() <= det_eps)
+        return invalid
+
     if device is None:
         device = images.device
     T, C_img, _H, _W = images.shape
@@ -907,6 +921,9 @@ def compute_proto_plane_position_homography_new(
     keypoints = [list()] * T
     used_keypoints = [list()] * T
     missing_match_data = torch.zeros(T, dtype=torch.bool, device=device)
+    # Track frames whose homography estimate exists but is not safe to use. They follow
+    # the same fallback path as frames with missing masks or missing match metadata.
+    singular_homographies = torch.zeros(T, dtype=torch.bool, device=device)
 
     def extract_match_data(entries, used_entries, entry_idx: int):
         if entry_idx >= len(entries) or entry_idx >= len(used_entries):
@@ -947,8 +964,14 @@ def compute_proto_plane_position_homography_new(
             keypoints[valid_idx] = kp_entry
             used_keypoints[valid_idx] = used_entry
 
-        H[post_filter_wo_ref] = tensorify(
-            post[:, 0], dtype=dtype, device=device)
+        post_indices = post_filter_wo_ref.argwhere().squeeze(-1)
+        post_homographies = tensorify(post[:, 0], dtype=dtype, device=device)
+        invalid_post_homographies = find_invalid_homographies(post_homographies)
+        # Preserve the frame mapping so only the bad homographies are suppressed.
+        # Valid forward homographies can still be used for the rest of the sequence.
+        singular_homographies[post_indices[invalid_post_homographies]] = True
+        if (~invalid_post_homographies).any():
+            H[post_indices[~invalid_post_homographies]] = post_homographies[~invalid_post_homographies]
 
     if pre_filter.sum() > 1:
         filtered_images = images[pre_filter].flip(
@@ -974,13 +997,26 @@ def compute_proto_plane_position_homography_new(
             keypoints[valid_idx] = kp_entry[::-1]
             used_keypoints[valid_idx] = used_entry[::-1]
 
-        H[pre_filter_wo_ref] = tensorify(pre[:, 0], dtype=dtype, device=device).flip(
-            0).inverse()  # Flip back the homographies and invert so we mimic the same as the post filter
+        pre_indices = pre_filter_wo_ref.argwhere().squeeze(-1)
+        pre_homographies = tensorify(pre[:, 0], dtype=dtype, device=device).flip(0)
+        invalid_pre_homographies = find_invalid_homographies(pre_homographies)
+        # Pre-reference tracking runs on a time-reversed sequence. After flipping back
+        # into chronological order we only invert homographies that are already known
+        # to be safe; otherwise we mark that frame invalid and fall back to identity.
+        singular_homographies[pre_indices[invalid_pre_homographies]] = True
+        if (~invalid_pre_homographies).any():
+            H[pre_indices[~invalid_pre_homographies]] = torch.linalg.inv(
+                pre_homographies[~invalid_pre_homographies]
+            )  # Invert so we mimic the same direction as the post filter.
 
     invalid_homographies = ~torch.isfinite(H).all(dim=(-1, -2))
     H[invalid_homographies] = torch.eye(
         3, dtype=dtype, device=device).unsqueeze(0)
-    invalid_homographies = invalid_homographies | missing_in_frame | missing_match_data
+    # Collapse every known failure mode into one mask so later code can keep its
+    # existing behavior: invalid frames reuse the last good plane estimate instead of
+    # aborting object creation for the whole sequence.
+    invalid_homographies = invalid_homographies | missing_in_frame | missing_match_data | singular_homographies
+    H[invalid_homographies] = torch.eye(3, dtype=dtype, device=device)
 
     def mask_to_global(
             points: torch.Tensor,

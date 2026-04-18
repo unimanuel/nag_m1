@@ -2,6 +2,18 @@
 import argparse
 import logging  # noqa
 import os
+import sys
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+TOOLS_ROOT = os.path.join(REPO_ROOT, "tools")
+
+# Force the in-repo `nag` and companion `tools` package to win import resolution.
+# Without this, `python nag/scripts/run_nag.py ...` can pick up an older installed
+# `site-packages/nag`, which makes local debugging confusing because edits in this
+# checkout would not affect the code path the script actually executes.
+for path in (REPO_ROOT, TOOLS_ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 import matplotlib
 import matplotlib.pyplot as plt
