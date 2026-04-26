@@ -993,7 +993,7 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
 
             fac = gdir.norm(dim=-1) / torch.cos(angles)
             result_points = coord_ro + fac.unsqueeze(-1) * coord_rd # shoots ray
-            plane_center, plane_normal = find_plane(result_points[:, 0]) #gets bg plane center
+            plane_center, plane_normal = find_plane(result_points[:, closests]) #gets bg plane center
             ###########################
 
             orientation = camera._orientation[closests].clone()
