@@ -6,7 +6,8 @@ NAGConfig:
   background_plane_kwargs:
     coarse_to_fine_color: false
     color_mask_resolution:
-      __class__: DEFAULT
+      - 960
+      - 1920
     color_mask_smoothing: false
     encoding_flow_config: large
     encoding_image_config: large
@@ -58,7 +59,7 @@ NAGConfig:
   final_mask_evaluation_metrics:
     - tools.metric.torch.psnr.PSNR
     - nag.loss.ssim.SSIM
-  final_modalities_save: true
+  final_modalities_save: false
   final_plot_resolution_factor: 0.5
   final_plot_without_view_dependency: true
   frame_indices_filter:
