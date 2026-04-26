@@ -46,10 +46,10 @@ def default_control_point_times(
 class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappableSceneNode3D):
     """"Background image plane class with a neural field for color and flow, without learnable position parameter."""
 
-    TCNN_QUERY_CHUNK_SIZE = 16384
+    TCNN_QUERY_CHUNK_SIZE = 32768
     """Upper bound for per-call TCNN query rows to avoid unstable large CUTLASS matmuls."""
 
-    TCNN_QUERY_MIN_CHUNK_SIZE = 256
+    TCNN_QUERY_MIN_CHUNK_SIZE = 1024
     """Lower bound for adaptive TCNN query retries before surfacing the original error."""
 
     encoding_image: tcnn.Encoding
@@ -340,10 +340,8 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
                 err_msg = str(err)
                 is_tcnn_matmul_error = (
                     "cutlass_matmul.h" in err_msg
-                    or "gpu_memory.h" in err_msg
                     or "tiny-cuda-nn" in err_msg
                     or "tinycudann" in err_msg
-                    or "CUDA_ERROR_OUT_OF_MEMORY" in err_msg
                 )
                 if not is_tcnn_matmul_error:
                     raise
@@ -994,8 +992,8 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
                 coord_rd), coord_rd, mode="tan2")
 
             fac = gdir.norm(dim=-1) / torch.cos(angles)
-            result_points = coord_ro + fac.unsqueeze(-1) * coord_rd
-            plane_center, plane_normal = find_plane(result_points[:, 0])
+            result_points = coord_ro + fac.unsqueeze(-1) * coord_rd # shoots ray
+            plane_center, plane_normal = find_plane(result_points[:, 0]) #gets bg plane center
             ###########################
 
             orientation = camera._orientation[closests].clone()

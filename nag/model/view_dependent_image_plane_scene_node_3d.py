@@ -261,9 +261,11 @@ class ViewDependentImagePlaneSceneNode3D(
             RGB values and alpha values for the given uv coordinates. Shapes: (B, T, 3), (B, T, 1)
             Whereby both are in range [0, 1].
         """
+        if ray_directions is None:
+            raise ValueError(
+                "Ray directions must be provided for view dependence.")
+
         B, T, _ = uv.shape
-        use_view_dependence = bool(
-            torch.any(self.view_dependence_weight != 0).item())
         # In local coordinates the plane center is at (0, 0, 0)
         if self.flow_weight != 0:
             if self.deprecated_flow:
@@ -305,37 +307,31 @@ class ViewDependentImagePlaneSceneNode3D(
             query_points_alpha = query_points_alpha + \
                 alpha_shift.reshape(-1, 2)
 
-        if use_view_dependence:
-            if ray_directions is None:
-                raise ValueError(
-                    "Ray directions must be provided for view dependence.")
-            rot_vec = compute_incline_angle(ray_directions, torch.tensor(
-                [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
-            zero_ang = torch.isclose(
-                torch.nan_to_num(rot_vec[..., 2]), torch.zeros_like(rot_vec[..., 2]), atol=1e-5)
-            assert zero_ang.all(
-            ), f"Incline angle is not correct. z should be 0. But is: {rot_vec[~zero_ang][..., 2]}"
+        # Get view dependence
+        rot_vec = compute_incline_angle(ray_directions, torch.tensor(
+            [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
+        # Raise if any z is larger than
 
-            antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
-                torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
-            # Angle is pi, so we have an antiparallel vector. Set to 0
-            rot_vec[antiparallel] = torch.zeros(
-                3, dtype=rot_vec.dtype, device=rot_vec.device)
+        zero_ang = torch.isclose(
+            torch.nan_to_num(rot_vec[..., 2]), torch.zeros_like(rot_vec[..., 2]), atol=1e-5)
+        assert zero_ang.all(
+        ), f"Incline angle is not correct. z should be 0. But is: {rot_vec[~zero_ang][..., 2]}"
 
-            view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
-                                                       angle=rot_vec[..., :2],
-                                                       t=t,
-                                                       sin_epoch=sin_epoch,
-                                                       context=context,
-                                                       is_inside=is_inside
-                                                       ).reshape(-1, 4)  # B, 4
-            view_rgb = view_dependence[:, :3]
-            view_alpha = view_dependence[:, 3:4]
-        else:
-            view_rgb = torch.zeros(
-                query_points.shape[0], 3, dtype=self.dtype, device=query_points.device)
-            view_alpha = torch.zeros(
-                query_points.shape[0], 1, dtype=self.dtype, device=query_points.device)
+        antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
+            torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
+        # Angle is pi, so we have an antiparallel vector. Set to 0
+        rot_vec[antiparallel] = torch.zeros(
+            3, dtype=rot_vec.dtype, device=rot_vec.device)
+
+        view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
+                                                   angle=rot_vec[..., :2],
+                                                   t=t,
+                                                   sin_epoch=sin_epoch,
+                                                   context=context,
+                                                   is_inside=is_inside
+                                                   ).reshape(-1, 4)  # B, 4
+        view_rgb = view_dependence[:, :3]
+        view_alpha = view_dependence[:, 3:4]
 
         if is_inside is not None:
             query_points = query_points[is_inside.reshape(B * T)]
@@ -466,8 +462,6 @@ class ViewDependentImagePlaneSceneNode3D(
         uv_network = uv_plane - 0.5
 
         B, T, _ = uv_network.shape
-        use_view_dependence = bool(
-            torch.any(self.view_dependence_weight != 0).item())
         # In local coordinates the plane center is at (0, 0, 0)
         if self.flow_weight != 0:
             if self.deprecated_flow:
@@ -513,40 +507,37 @@ class ViewDependentImagePlaneSceneNode3D(
         view_alpha = None
 
         if query_color or query_alpha:
-            if use_view_dependence:
-                if ray_directions is None:
-                    raise ValueError(
-                        "Ray directions must be provided for view dependence.")
-                rot_vec = compute_incline_angle(ray_directions, torch.tensor(
-                    [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
-                assert torch.allclose(rot_vec[..., 2], torch.zeros_like(
-                    rot_vec[..., 2]), atol=1e-5), "Incline angle is not correct. z should be 0."
+            if ray_directions is None:
+                raise ValueError(
+                    "Ray directions must be provided for view dependence.")
+            # Get view dependence
+            rot_vec = compute_incline_angle(ray_directions, torch.tensor(
+                [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
+            # Raise if any z is larger than
+            assert torch.allclose(rot_vec[..., 2], torch.zeros_like(
+                rot_vec[..., 2]), atol=1e-5), "Incline angle is not correct. z should be 0."
 
-                antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
-                    torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
-                # Angle is pi, so we have an antiparallel vector. Set to 0
-                rot_vec[antiparallel] = torch.zeros(
-                    3, dtype=rot_vec.dtype, device=rot_vec.device)
+            antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
+                torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
+            # Angle is pi, so we have an antiparallel vector. Set to 0
+            rot_vec[antiparallel] = torch.zeros(
+                3, dtype=rot_vec.dtype, device=rot_vec.device)
 
-                view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
-                                                           angle=rot_vec[..., :2],
-                                                           t=t,
-                                                           sin_epoch=sin_epoch,
-                                                           is_inside=is_inside
-                                                           ).reshape(-1, 4)
-                view_rgb = view_dependence[:, :3]
-                view_alpha = view_dependence[:, 3:4]
-            else:
-                view_rgb = torch.zeros(
-                    query_points.shape[0], 3, dtype=self.dtype, device=query_points.device)
-                view_alpha = torch.zeros(
-                    query_points.shape[0], 1, dtype=self.dtype, device=query_points.device)
+            view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
+                                                       angle=rot_vec[..., :2],
+                                                       t=t,
+                                                       sin_epoch=sin_epoch,
+                                                       is_inside=is_inside
+                                                       ).reshape(-1, 4)
+            view_rgb = view_dependence[:, :3]
+            view_alpha = view_dependence[:, 3:4]
 
             if is_inside is not None:
                 query_points = query_points[is_inside.reshape(B * T)]
                 query_points_alpha = query_points_alpha[is_inside.reshape(B * T)]
                 view_rgb = view_rgb[is_inside.reshape(B * T)]
                 view_alpha = view_alpha[is_inside.reshape(B * T)]
+
         else:
             view_rgb = torch.zeros(B * T, 3, dtype=self.dtype,
                                    device=uv_plane.device)
