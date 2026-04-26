@@ -962,15 +962,10 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
                 logger.warning(
                     "Camera rotation is close to 180 degrees. A plane model is not suitable for this camera.")
 
-            norm_vec_cand = quat_average(camera._orientation)
-            # Get closests
-            angle_diff = unitquat_to_rotvec(quat_subtraction(camera._orientation,
-                                                             norm_vec_cand.expand(camera._orientation.shape[0], -1)))  # Check
-            closests = torch.argmin(angle_diff.norm(dim=-1), dim=0)
-            # Take the closests
-            closests_t = camera._times[closests]
+            anchor_idx = len(times) // 2
+            anchor_t = camera._times[anchor_idx]
             center_ro, center_dir = camera.get_global_rays(uv=camera.get_intrinsics(
-                t=closests_t)[:, :2, 2], t=closests_t, uv_includes_time=True)
+                t=anchor_t)[:, :2, 2], t=anchor_t, uv_includes_time=True)
 
             # position = center_ro + scene_cutoff_distance * center_dir
 
@@ -983,8 +978,8 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
             dist = torch.tensor([0, 0, scene_cutoff_distance],
                                 dtype=dtype, device=times.device)
             gdist = camera.local_to_global(
-                dist, t=closests_t, v_includes_time=False)[..., :3]  # Shape 1, 1, 3
-            cen = camera.get_global_position(t=closests_t)[..., :3, 3]
+                dist, t=anchor_t, v_includes_time=False)[..., :3]  # Shape 1, 1, 3
+            cen = camera.get_global_position(t=anchor_t)[..., :3, 3]
             gdir = gdist - cen  # Shape 1, 1, 3
 
             # Angle in the plane defined between the rays and the center ray
@@ -993,10 +988,10 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
 
             fac = gdir.norm(dim=-1) / torch.cos(angles)
             result_points = coord_ro + fac.unsqueeze(-1) * coord_rd # shoots ray
-            plane_center, plane_normal = find_plane(result_points[:, closests]) #gets bg plane center
+            plane_center, plane_normal = find_plane(result_points[:, anchor_idx]) #gets bg plane center
             ###########################
 
-            orientation = camera._orientation[closests].clone()
+            orientation = camera._orientation[anchor_idx].clone()
 
             global_plane_position = compose_translation_orientation(
                 plane_center, orientation.unsqueeze(0)).expand(len(times), -1, -1)
@@ -1111,9 +1106,9 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
             )
 
             global_corners = plane.get_global_plane_corners(
-                t=closests_t).detach()
+                t=anchor_t).detach()
             cam_image_corners, oks = camera.global_to_image_coordinates(
-                global_corners, t=closests_t, v_includes_time=True, return_ok=True)
+                global_corners, t=anchor_t, v_includes_time=True, return_ok=True)
             cam_image_corners = cam_image_corners[:, :, :2].detach()
 
             world.add_scene_children(plane)

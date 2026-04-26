@@ -572,7 +572,7 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
             logger.warning(
                 f"Background camera distance is smaller than the maximum distance of one box {max_vis_dist:.2f} to the camera. Setting background camera distance to: {background_dist:.2f} (twice the maximum distance).")
             return background_dist
-        else:
+        else: #if no bounding boxes
             # Check for already created objects their distance to the camera
             max_vis_dist = 0
             for obj in world.get_scene_children():
@@ -785,7 +785,7 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                     used_masks, proxy_init)
                 args = self._get_background_init_kwargs(background_plane_type)
 
-                background_camera_distance = self.get_background_camera_distance(
+                background_camera_distance = self.get_background_camera_distance( #This background distance used.
                     masks=masks,
                     camera=camera,
                     position_strategy=init_strategy.plane_position_strategy if hasattr(
