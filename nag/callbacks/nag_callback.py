@@ -58,6 +58,7 @@ def generate_batched_outputs_and_save(
         disable_view_dependency: bool = False,
         disable_camera_aberration: bool = False,
         disable_flow: bool = False,
+        max_total_batch_size_inference: Optional[int] = None,
 ) -> Union[List[str], Tuple[List[str], torch.Tensor]]:
     if save_format_path is None:
         save_format_path = os.path.join(model.config.output_path,
@@ -65,7 +66,13 @@ def generate_batched_outputs_and_save(
                                         "{epoch:02d}_epoch_{t}_t_{idx}_idx_full.png")
     old_view_dependency_weights = dict()
     old_flow_weights = dict()
+    old_max_total_batch_size_inference = None
+    override_max_total_batch_size_inference = False
     try:
+        if max_total_batch_size_inference is not None:
+            override_max_total_batch_size_inference = True
+            old_max_total_batch_size_inference = model.config.max_total_batch_size_inference
+            model.config.max_total_batch_size_inference = max_total_batch_size_inference
         # If view dependency is disabled, we need to disable it
         if disable_view_dependency:
             for o in model.objects:
@@ -135,6 +142,9 @@ def generate_batched_outputs_and_save(
         if disable_flow:
             for o, w in old_flow_weights.items():
                 o.flow_weight[...] = w
+
+        if override_max_total_batch_size_inference:
+            model.config.max_total_batch_size_inference = old_max_total_batch_size_inference
 
         if disable_camera_aberration:
             for o in model.objects:
@@ -949,10 +959,45 @@ class NAGCallback(pl.Callback):
             except RuntimeError as retry_err:
                 if not self._is_tcnn_render_error(retry_err):
                     raise
+                reduced_batch_sizes = []
+                model = retry_kwargs.get("model")
+                if model is not None:
+                    train_batch_size = getattr(model.config, "max_total_batch_size", None)
+                    inference_batch_size = getattr(
+                        model.config, "max_total_batch_size_inference", None)
+                    if train_batch_size is not None:
+                        base_reduced_batch_size = int(train_batch_size)
+                    elif inference_batch_size is not None:
+                        base_reduced_batch_size = max(1, int(inference_batch_size) // 8)
+                    else:
+                        base_reduced_batch_size = None
+
+                    if base_reduced_batch_size is not None:
+                        reduced_batch_sizes = [
+                            base_reduced_batch_size,
+                            max(1, base_reduced_batch_size // 4),
+                            max(1, base_reduced_batch_size // 16),
+                        ]
+                        reduced_batch_sizes = list(dict.fromkeys(reduced_batch_sizes))
+
+                for reduced_batch_size in reduced_batch_sizes:
+                    logging.warning(
+                        f"{failure_label} still failed after disabling flow and view dependence. "
+                        f"Retrying with reduced inference batch size ({reduced_batch_size})."
+                    )
+                    constrained_retry_kwargs = dict(retry_kwargs)
+                    constrained_retry_kwargs["max_total_batch_size_inference"] = reduced_batch_size
+                    try:
+                        return generate_batched_outputs_and_save(**constrained_retry_kwargs)
+                    except RuntimeError as constrained_retry_err:
+                        if not self._is_tcnn_render_error(constrained_retry_err):
+                            raise
+                        retry_err = constrained_retry_err
                 if not skip_on_failure:
-                    raise
+                    raise retry_err
                 logging.error(
-                    f"{failure_label} still failed after disabling flow and view dependence. Skipping render."
+                    f"{failure_label} still failed after disabling flow and view dependence. "
+                    f"Last error: {retry_err}. Skipping render."
                 )
                 return None
 

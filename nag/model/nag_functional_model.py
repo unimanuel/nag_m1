@@ -39,6 +39,18 @@ from tools.transforms.geometric.quaternion import quat_subtraction
 from tools.util.torch import TensorUtil
 
 
+def _is_tcnn_runtime_error(err: BaseException) -> bool:
+    msg = str(err)
+    return (
+        "cutlass_matmul.h" in msg
+        or "tiny-cuda-nn" in msg
+        or "tinycudann" in msg
+        or "gpu_memory.h" in msg
+        or "CUDA_ERROR_OUT_OF_MEMORY" in msg
+        or "CUDA_ERROR_INVALID_VALUE" in msg
+    )
+
+
 @torch.jit.script
 def get_translation_orientation(
     t: torch.Tensor,
@@ -791,20 +803,35 @@ class NAGFunctionalModel(NAGModel):
             # obj_inter = intersection_points[i]
             obj_is_inter = is_inside[i]
             any_per_time = obj_is_inter.any(dim=-1)
-            colors[i, any_per_time], alphas[i, any_per_time] = obj(intersection_points[i, any_per_time],
-                                                                   is_inside=obj_is_inter[any_per_time],
-                                                                   ray_origins=global_ray_origins[any_per_time],
-                                                                   ray_directions=global_ray_directions[any_per_time],
-                                                                   t=t,
-                                                                   sin_epoch=self.sin_epoch,
-                                                                   global_position=global_plane_positions[i],
-                                                                   plane_scale=local_plane_scale[i],
-                                                                   plane_scale_offset=local_plane_scale_offset[i],
-                                                                   next_sin_epoch=self.next_sin_epoch,
-                                                                   batch_idx=batch_idx,
-                                                                   max_batch_idx=self.num_batches,
-                                                                   context=context
-                                                                   )
+            if not any_per_time.any():
+                continue
+            try:
+                colors[i, any_per_time], alphas[i, any_per_time] = obj(intersection_points[i, any_per_time],
+                                                                       is_inside=obj_is_inter[any_per_time],
+                                                                       ray_origins=global_ray_origins[any_per_time],
+                                                                       ray_directions=global_ray_directions[any_per_time],
+                                                                       t=t,
+                                                                       sin_epoch=self.sin_epoch,
+                                                                       global_position=global_plane_positions[i],
+                                                                       plane_scale=local_plane_scale[i],
+                                                                       plane_scale_offset=local_plane_scale_offset[i],
+                                                                       next_sin_epoch=self.next_sin_epoch,
+                                                                       batch_idx=batch_idx,
+                                                                       max_batch_idx=self.num_batches,
+                                                                       context=context
+                                                                       )
+            except RuntimeError as err:
+                if not _is_tcnn_runtime_error(err):
+                    raise
+                obj_name = obj.get_name() if hasattr(obj, "get_name") else None
+                obj_label = obj_name if obj_name is not None else f"object_{i}"
+                selected_ray_rows = int(any_per_time.sum().item())
+                selected_hits = int(obj_is_inter.sum().item())
+                raise RuntimeError(
+                    f"TCNN render failed for {obj_label} ({type(obj).__name__}, "
+                    f"scene_index={i}, selected_ray_rows={selected_ray_rows}, "
+                    f"selected_hits={selected_hits}, total_rays={B}, num_times={T}): {err}"
+                ) from err
 
         if not self._position_gradient_rescaling or not torch.is_grad_enabled():
             object_colors, object_alphas = compute_object_rgba(colors=colors, alphas=alphas, t=t,
