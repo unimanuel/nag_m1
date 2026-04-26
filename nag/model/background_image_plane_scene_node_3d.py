@@ -962,6 +962,11 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
                 logger.warning(
                     "Camera rotation is close to 180 degrees. A plane model is not suitable for this camera.")
 
+            # Anchor the static world-space background plane in the middle of
+            # the trajectory instead of near the beginning. On long
+            # straight-ahead drives, anchoring too early makes it easier for
+            # later camera poses to outrun or miss the finite plane, which
+            # shows up as black background frames near the end of the sequence.
             anchor_idx = len(times) // 2
             anchor_t = camera._times[anchor_idx]
             center_ro, center_dir = camera.get_global_rays(uv=camera.get_intrinsics(
@@ -988,6 +993,10 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
 
             fac = gdir.norm(dim=-1) / torch.cos(angles)
             result_points = coord_ro + fac.unsqueeze(-1) * coord_rd # shoots ray
+            # Use the same anchor frame for both the fitted plane center and
+            # the plane orientation below. Mixing geometry from one frame with
+            # orientation from another can place the background plane
+            # inconsistently in world space.
             plane_center, plane_normal = find_plane(result_points[:, anchor_idx]) #gets bg plane center
             ###########################
 

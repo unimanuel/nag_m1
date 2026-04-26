@@ -791,6 +791,10 @@ class NAGFunctionalModel(NAGModel):
             # obj_inter = intersection_points[i]
             obj_is_inter = is_inside[i]
             any_per_time = obj_is_inter.any(dim=-1)
+            # Skip objects that are not hit by any ray in this render chunk.
+            # Some object implementations assume at least one query point and can
+            # fail or produce degenerate all-zero outputs on empty batches.
+            # Rendering should simply ignore such objects for this batch.
             if not any_per_time.any():
                 continue
             colors[i, any_per_time], alphas[i, any_per_time] = obj(intersection_points[i, any_per_time],
