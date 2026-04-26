@@ -46,10 +46,10 @@ def default_control_point_times(
 class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappableSceneNode3D):
     """"Background image plane class with a neural field for color and flow, without learnable position parameter."""
 
-    TCNN_QUERY_CHUNK_SIZE = 32768
+    TCNN_QUERY_CHUNK_SIZE = 16384
     """Upper bound for per-call TCNN query rows to avoid unstable large CUTLASS matmuls."""
 
-    TCNN_QUERY_MIN_CHUNK_SIZE = 1024
+    TCNN_QUERY_MIN_CHUNK_SIZE = 256
     """Lower bound for adaptive TCNN query retries before surfacing the original error."""
 
     encoding_image: tcnn.Encoding
@@ -340,8 +340,10 @@ class BackgroundImagePlaneSceneNode3D(BackgroundPlaneSceneNode3D, TextureMappabl
                 err_msg = str(err)
                 is_tcnn_matmul_error = (
                     "cutlass_matmul.h" in err_msg
+                    or "gpu_memory.h" in err_msg
                     or "tiny-cuda-nn" in err_msg
                     or "tinycudann" in err_msg
+                    or "CUDA_ERROR_OUT_OF_MEMORY" in err_msg
                 )
                 if not is_tcnn_matmul_error:
                     raise

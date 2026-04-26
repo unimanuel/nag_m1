@@ -243,11 +243,9 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
             RGB values and alpha values for the given uv coordinates. Shapes: (B, T, 3), (B, T, 1)
             Whereby both are in range [0, 1].
         """
-        if ray_directions is None:
-            raise ValueError(
-                "Ray directions must be provided for view dependence.")
-
         B, T, _ = uv.shape
+        use_view_dependence = bool(
+            torch.any(self.view_dependence_weight != 0).item())
         # In local coordinates the plane center is at (0, 0, 0)
         if self.flow_weight != 0:
             if self.deprecated_flow:
@@ -281,29 +279,34 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
         # And the flow as adjusted for the time already
         query_points = query_points.reshape(-1, 2)  # (B*T, 2)
 
-        # Get view dependence
-        rot_vec = compute_incline_angle(ray_directions, torch.tensor(
-            [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
-        # Raise if any z is larger than
+        if use_view_dependence:
+            if ray_directions is None:
+                raise ValueError(
+                    "Ray directions must be provided for view dependence.")
 
-        zero_ang = torch.isclose(
-            torch.nan_to_num(rot_vec[..., 2]), torch.zeros_like(rot_vec[..., 2]), atol=1e-5)
-        assert zero_ang.all(
-        ), f"Incline angle is not correct. z should be 0. But is: {rot_vec[~zero_ang][..., 2]}"
+            rot_vec = compute_incline_angle(ray_directions, torch.tensor(
+                [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
+            zero_ang = torch.isclose(
+                torch.nan_to_num(rot_vec[..., 2]), torch.zeros_like(rot_vec[..., 2]), atol=1e-5)
+            assert zero_ang.all(
+            ), f"Incline angle is not correct. z should be 0. But is: {rot_vec[~zero_ang][..., 2]}"
 
-        antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
-            torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
-        # Angle is pi, so we have an antiparallel vector. Set to 0
-        rot_vec[antiparallel] = torch.zeros(
-            3, dtype=rot_vec.dtype, device=rot_vec.device)
+            antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
+                torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
+            # Angle is pi, so we have an antiparallel vector. Set to 0
+            rot_vec[antiparallel] = torch.zeros(
+                3, dtype=rot_vec.dtype, device=rot_vec.device)
 
-        view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
-                                                   angle=rot_vec[..., :2],
-                                                   t=t,
-                                                   sin_epoch=sin_epoch,
-                                                   context=context
-                                                   ).reshape(-1, 3)  # B, 3
-        view_rgb = view_dependence[:, :3]
+            view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
+                                                       angle=rot_vec[..., :2],
+                                                       t=t,
+                                                       sin_epoch=sin_epoch,
+                                                       context=context
+                                                       ).reshape(-1, 3)  # B, 3
+            view_rgb = view_dependence[:, :3]
+        else:
+            view_rgb = torch.zeros(
+                query_points.shape[0], 3, dtype=self.dtype, device=query_points.device)
 
         # Get the RGB values
         network_rgb = self.get_rgb(query_points, sin_epoch)
@@ -399,6 +402,8 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
         uv_network = uv_plane - 0.5
 
         B, T, _ = uv_network.shape
+        use_view_dependence = bool(
+            torch.any(self.view_dependence_weight != 0).item())
         # In local coordinates the plane center is at (0, 0, 0)
         if self.flow_weight != 0:
             if self.deprecated_flow:
@@ -420,26 +425,28 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
         # query_points = shadow_zeros(query_points)
 
         if query_color:
-            if ray_directions is None:
-                raise ValueError(
-                    "Ray directions must be provided for view dependence.")
-            # Get view dependence
-            rot_vec = compute_incline_angle(ray_directions, torch.tensor(
-                [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
-            # Raise if any z is larger than
-            assert torch.allclose(rot_vec[..., 2], torch.zeros_like(
-                rot_vec[..., 2]), atol=1e-5), "Incline angle is not correct. z should be 0."
+            if use_view_dependence:
+                if ray_directions is None:
+                    raise ValueError(
+                        "Ray directions must be provided for view dependence.")
+                rot_vec = compute_incline_angle(ray_directions, torch.tensor(
+                    [0, 0, 1], device=ray_directions.device, dtype=ray_directions.dtype))
+                assert torch.allclose(rot_vec[..., 2], torch.zeros_like(
+                    rot_vec[..., 2]), atol=1e-5), "Incline angle is not correct. z should be 0."
 
-            antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
-                torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
-            # Angle is pi, so we have an antiparallel vector. Set to 0
-            rot_vec[antiparallel] = torch.zeros(
-                3, dtype=rot_vec.dtype, device=rot_vec.device)
+                antiparallel = torch.isclose(rot_vec[..., :2], torch.tensor(
+                    torch.pi, dtype=rot_vec.dtype, device=rot_vec.device), atol=1e-6).any(dim=-1)
+                # Angle is pi, so we have an antiparallel vector. Set to 0
+                rot_vec[antiparallel] = torch.zeros(
+                    3, dtype=rot_vec.dtype, device=rot_vec.device)
 
-            view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
-                                                       angle=rot_vec[..., :2],
-                                                       t=t,
-                                                       sin_epoch=sin_epoch).reshape(-1, 3)
+                view_dependence = self.get_view_dependence(query_points.reshape(B, T, 2),
+                                                           angle=rot_vec[..., :2],
+                                                           t=t,
+                                                           sin_epoch=sin_epoch).reshape(-1, 3)
+            else:
+                view_dependence = torch.zeros(
+                    query_points.shape[0], 3, dtype=self.dtype, device=query_points.device)
 
             # Get the RGB values
             network_rgb = self.get_rgb(query_points, sin_epoch)
