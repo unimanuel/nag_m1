@@ -6,7 +6,8 @@ NAGConfig:
   background_plane_kwargs:
     coarse_to_fine_color: false
     color_mask_resolution:
-      __class__: DEFAULT
+      - 960
+      - 1920
     color_mask_smoothing: false
     encoding_flow_config: large
     encoding_image_config: large
@@ -14,7 +15,7 @@ NAGConfig:
     network_flow_config: large
     network_image_config: large
     network_view_dependence_config: large
-  background_plane_type: nag.model.view_dependent_background_image_plane_scene_node_3d.ViewDependentBackgroundImagePlaneSceneNode3D
+  background_plane_type: nag.model.view_dependent_background_image_sphere_scene_node_3d.ViewDependentBackgroundImageSphereSceneNode3D
   background_relative_scale_margin: 0.5
   boxes_filename_pattern: (?P<index>[0-9]+).json
   boxes_object_id_mask_mapping_path: "{data_path}/box_id_mapping.json"
@@ -58,8 +59,8 @@ NAGConfig:
   final_mask_evaluation_metrics:
     - tools.metric.torch.psnr.PSNR
     - nag.loss.ssim.SSIM
-  final_modalities_save: true
-  final_plot_resolution_factor: 1
+  final_modalities_save: false
+  final_plot_resolution_factor: 0.5
   final_plot_without_view_dependency: true
   frame_indices_filter:
     __class__: slice
@@ -100,7 +101,7 @@ NAGConfig:
   is_plane_translation_learnable: true
   is_waymo: false
   jit_enabled: true
-  learn_resolution_factor: 1
+  learn_resolution_factor: 0.5
   log_every_n_steps: 1
   log_gradient: false
   loss_kwargs:
@@ -116,7 +117,7 @@ NAGConfig:
   masks_path: "{data_path}/masks"
   max_epochs: 80
   max_image_size: 2040
-  max_total_batch_size: 20000000.0
+  max_total_batch_size: 450000.0
   max_total_batch_size_inference: 40000000.0
   model_type: nag.model.nag_functional_model.NAGFunctionalModel
   name: W141_174_197_large-undistorted
