@@ -308,7 +308,7 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     """If the rotation of the camera should be learnable."""
 
     has_background_plane: bool = field(default=True)
-    """If a background plane should be added to the scene. Has a fixed color and its position is fixed to the camera."""
+    """If a background plane should be added to the scene. Has a fixed color and its position could be fixed to the camera."""
 
     has_camera_aberration_plane: bool = field(default=False)
     """If a lens aberration plane should be added to the scene. Has a learned color and its position is fixed to the camera."""
