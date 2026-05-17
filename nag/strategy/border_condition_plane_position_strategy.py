@@ -53,7 +53,7 @@ class BorderConditionPlanePositionStrategy(PlanePositionStrategy):
         cmasks = mask[:, :, bth:-bth, bth:-bth]
         hit_left = cmasks[..., 0].any(dim=(-1, -2))
         hit_right = cmasks[..., -1].any(dim=(-1, -2))
-        hit_top = cmasks[..., 0].any(dim=(-1, -2))
+        hit_top = cmasks[..., 0, :].any(dim=(-1, -2))
         hit_bottom = cmasks[..., -1, :].any(dim=(-1, -2))
 
         # If an objects touches the border in 2 directions, the object is probably larger than the image and we should use a fixed plane
