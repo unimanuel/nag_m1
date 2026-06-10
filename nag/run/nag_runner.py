@@ -530,13 +530,27 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
 
         from nag.strategy.box_plane_position_strategy import \
             BoxPlanePositionStrategy
+        def scalar(v: Union[float, torch.Tensor]) -> float:
+            if torch.is_tensor(v):
+                return float(v.detach().cpu().item())
+            return float(v)
+
         if not hasattr(self, "boxes"):
             self.boxes = self.load_boxes()
         will_use_boxes = position_strategy is not None and issubclass(
             position_strategy, (BoxPlanePositionStrategy, BorderConditionPlanePositionStrategy))
+        logger.info(
+            "Background distance selection: "
+            f"boxes_available={len(self.boxes) > 0}, "
+            f"num_boxes={len(self.boxes)}, "
+            f"position_strategy={position_strategy.__name__ if position_strategy is not None else None}, "
+            f"will_use_boxes={will_use_boxes}, "
+            f"configured_distance={scalar(self.config.background_camera_distance):.4f}"
+        )
         if len(self.boxes) > 0 and will_use_boxes:
             # Check distance of the boxes to the camera if they are visible
             max_vis_dist = 0
+            max_vis_source = None
             for obj_id, box in self.boxes.items():
                 mask_index = np.argwhere(self.dataset.mask_ids == obj_id)
                 if len(mask_index) == 0:
@@ -560,21 +574,38 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
 
                 dists = torch.norm(camera_positions - box_positions, dim=-1)
                 try:
-                    if dists.max() > max_vis_dist:
-                        max_vis_dist = dists.max()
+                    dist_max = dists.max()
+                    if dist_max > max_vis_dist:
+                        max_vis_dist = dist_max
+                        max_vis_source = obj_id
                 except Exception as e:
                     pass
 
             if self.config.background_camera_distance > max_vis_dist * 2:
+                logger.info(
+                    "Background distance result: "
+                    f"branch=boxes, max_vis_dist={scalar(max_vis_dist):.4f}, "
+                    f"max_vis_source={max_vis_source}, "
+                    f"returned_distance={scalar(self.config.background_camera_distance):.4f}, "
+                    "reason=config_distance_is_larger"
+                )
                 return self.config.background_camera_distance
 
             background_dist = max_vis_dist * 2
             logger.warning(
                 f"Background camera distance is smaller than the maximum distance of one box {max_vis_dist:.2f} to the camera. Setting background camera distance to: {background_dist:.2f} (twice the maximum distance).")
+            logger.info(
+                "Background distance result: "
+                f"branch=boxes, max_vis_dist={scalar(max_vis_dist):.4f}, "
+                f"max_vis_source={max_vis_source}, "
+                f"returned_distance={scalar(background_dist):.4f}, "
+                "reason=twice_max_visible_distance"
+            )
             return background_dist
         else: #if no bounding boxes
             # Check for already created objects their distance to the camera
             max_vis_dist = 0
+            max_vis_source = None
             for obj in world.get_scene_children():
                 if not isinstance(obj, LearnedImagePlaneSceneNode3D):
                     continue
@@ -589,17 +620,33 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                     :, :3, 3].detach()
                 dists = torch.norm(camera_positions - plane_positions, dim=-1)
                 try:
-                    if dists.max() > max_vis_dist:
-                        max_vis_dist = dists.max()
+                    dist_max = dists.max()
+                    if dist_max > max_vis_dist:
+                        max_vis_dist = dist_max
+                        max_vis_source = idx
                 except Exception as e:
                     pass
 
             if self.config.background_camera_distance > max_vis_dist * 2:
+                logger.info(
+                    "Background distance result: "
+                    f"branch=object_planes, max_vis_dist={scalar(max_vis_dist):.4f}, "
+                    f"max_vis_source={max_vis_source}, "
+                    f"returned_distance={scalar(self.config.background_camera_distance):.4f}, "
+                    "reason=config_distance_is_larger"
+                )
                 return self.config.background_camera_distance
 
             background_dist = max_vis_dist * 2
             logger.warning(
                 f"Background camera distance is smaller than the maximum distance of a plane {max_vis_dist:.2f} to the camera. Setting background camera distance to: {background_dist:.2f} (twice the maximum distance).")
+            logger.info(
+                "Background distance result: "
+                f"branch=object_planes, max_vis_dist={scalar(max_vis_dist):.4f}, "
+                f"max_vis_source={max_vis_source}, "
+                f"returned_distance={scalar(background_dist):.4f}, "
+                "reason=twice_max_visible_distance"
+            )
             return background_dist
         # else:
         #     return self.config.background_camera_distance

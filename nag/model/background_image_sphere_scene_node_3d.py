@@ -418,6 +418,15 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         max_cam_dist = (cam_positions - center[None, :]).norm(dim=-1).max()
         # Conservative radius: trajectory radius + cutoff distance (+ margin)
         radius = (max_cam_dist + float(scene_cutoff_distance)) * (1.0 + float(relative_scale_margin))
+        logger.info(
+            "Sphere background geometry: "
+            f"max_cam_dist={float(max_cam_dist.detach().cpu().item()):.4f}, "
+            f"scene_cutoff_distance={float(scene_cutoff_distance):.4f}, "
+            f"relative_scale_margin={float(relative_scale_margin):.4f}, "
+            f"radius={float(radius.detach().cpu().item()):.4f}, "
+            f"center={[round(float(v), 4) for v in center.detach().cpu().tolist()]}, "
+            f"color_mask_resolution={color_mask_resolution}"
+        )
 
         if proxy_init:
             init_rgb = torch.zeros((3, int(color_mask_resolution[0]), int(color_mask_resolution[1])), dtype=dtype, device=times.device)
