@@ -2,6 +2,7 @@ import math
 from typing import Callable, Dict, List, Optional, Tuple, Union, Any
 import numpy as np
 import os
+import json
 
 from nag.config.nag_config import NAGConfig
 from nag.dataset.nag_dataset import NAGDataset
@@ -58,6 +59,8 @@ def generate_batched_outputs_and_save(
         disable_view_dependency: bool = False,
         disable_camera_aberration: bool = False,
         disable_flow: bool = False,
+        disable_rgb_residual: bool = False,
+        objects: Optional[List[ModuleSceneNode3D]] = None,
 ) -> Union[List[str], Tuple[List[str], torch.Tensor]]:
     if save_format_path is None:
         save_format_path = os.path.join(model.config.output_path,
@@ -65,6 +68,7 @@ def generate_batched_outputs_and_save(
                                         "{epoch:02d}_epoch_{t}_t_{idx}_idx_full.png")
     old_view_dependency_weights = dict()
     old_flow_weights = dict()
+    old_rgb_weights = dict()
     try:
         # If view dependency is disabled, we need to disable it
         if disable_view_dependency:
@@ -78,6 +82,11 @@ def generate_batched_outputs_and_save(
                 if hasattr(o, "flow_weight") and isinstance(o.flow_weight, torch.Tensor):
                     old_flow_weights[o] = o.flow_weight.detach().clone()
                     o.flow_weight[...] = 0.0
+        if disable_rgb_residual:
+            for o in model.objects:
+                if hasattr(o, "rgb_weight") and isinstance(o.rgb_weight, torch.Tensor):
+                    old_rgb_weights[o] = o.rgb_weight.detach().clone()
+                    o.rgb_weight[...] = 0.0
         if disable_camera_aberration:
             for o in model.objects:
                 if isinstance(o, LearnedAberrationPlaneSceneNode3D):
@@ -105,7 +114,7 @@ def generate_batched_outputs_and_save(
             images = torch.zeros(len(
                 t_indices), 3, resolution[1], resolution[0], device=model.device, dtype=torch.uint8)
 
-        for i, img_stack_out in enumerate(batch_fnc(model.config, resolution=resolution, t=t, progress_bar=progress_bar, progress_factory=progress_factory)):
+        for i, img_stack_out in enumerate(batch_fnc(model.config, resolution=resolution, t=t, objects=objects, progress_bar=progress_bar, progress_factory=progress_factory)):
             start_idx = i * batch_size
             end_idx = min(start_idx + batch_size, len(t_indices))
             t_cur_idx = t_indices[start_idx:end_idx]
@@ -135,6 +144,9 @@ def generate_batched_outputs_and_save(
         if disable_flow:
             for o, w in old_flow_weights.items():
                 o.flow_weight[...] = w
+        if disable_rgb_residual:
+            for o, w in old_rgb_weights.items():
+                o.rgb_weight[...] = w
 
         if disable_camera_aberration:
             for o in model.objects:
@@ -1013,6 +1025,86 @@ class NAGCallback(pl.Callback):
                                           "{epoch:02d}_epoch_{t}_t_diff.png")
             self.generate_diff_images_and_save(
                 images, tensorify(times, device=model.device), t_indices, self.runner.dataset, save_to_disk=True, save_format_path=diff_save_path, log_in_logger=False)
+
+        background = next((o for o in model.objects if isinstance(
+            o, BackgroundPlaneSceneNode3D)), None)
+        if background is None:
+            logging.info("No background node found. Skipping initial background diagnostics.")
+        else:
+            background_initial_kwargs = dict(initial_kwargs)
+            background_initial_kwargs.update(
+                objects=[background],
+                return_images=False,
+            )
+
+            background_render_specs = [
+                (
+                    "background",
+                    dict(),
+                    "Initial background render",
+                ),
+                (
+                    "background_no_flow_no_view",
+                    dict(disable_flow=True, disable_view_dependency=True),
+                    "Initial background render without flow/view dependence",
+                ),
+                (
+                    "background_initial_rgb_only",
+                    dict(disable_flow=True, disable_view_dependency=True, disable_rgb_residual=True),
+                    "Initial background initial-rgb-only render",
+                ),
+            ]
+            for subdir, extra_kwargs, failure_label in background_render_specs:
+                save_background_fmt_path = os.path.join(
+                    model.config.output_path,
+                    "initial",
+                    subdir,
+                    "{t}_t_{idx}_idx.png",
+                )
+                render_kwargs = dict(background_initial_kwargs)
+                render_kwargs.update(
+                    save_format_path=save_background_fmt_path,
+                    **extra_kwargs,
+                )
+                self._generate_with_render_fallback(
+                    render_kwargs,
+                    failure_label=failure_label,
+                    skip_on_failure=True,
+                )
+
+            if hasattr(background, "initial_rgb") and isinstance(background.initial_rgb, torch.Tensor):
+                initial_rgb = background.initial_rgb.detach()
+                texture_dir = os.path.join(
+                    model.config.output_path,
+                    "initial",
+                    "background_texture",
+                )
+                texture_path = os.path.join(texture_dir, "initial_rgb.png")
+                metadata_path = os.path.join(texture_dir, "initial_rgb_metadata.json")
+                if initial_rgb.ndim == 3:
+                    texture = initial_rgb.float().clamp(0, 1).cpu()
+                    if texture.shape[0] == 1:
+                        texture = texture.expand(3, -1, -1)
+                    save_image((texture * 255).byte(), texture_path, override=True, mkdirs=True)
+                else:
+                    logging.warning(
+                        f"Cannot save initial background texture image with shape {tuple(initial_rgb.shape)}. "
+                        "Expected (C, H, W)."
+                    )
+
+                os.makedirs(texture_dir, exist_ok=True)
+                metadata = {
+                    "background_class": background.__class__.__name__,
+                    "background_name": background.get_name(),
+                    "shape": list(initial_rgb.shape),
+                    "dtype": str(initial_rgb.dtype),
+                    "min": float(initial_rgb.min().detach().cpu().item()) if initial_rgb.numel() > 0 else None,
+                    "max": float(initial_rgb.max().detach().cpu().item()) if initial_rgb.numel() > 0 else None,
+                }
+                with open(metadata_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2)
+            else:
+                logging.info("Background node has no initial_rgb tensor. Skipping raw initial texture export.")
 
         if self.config.initial_plot_video:
             try:
