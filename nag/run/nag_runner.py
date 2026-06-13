@@ -520,6 +520,34 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                 args['box'] = box
         return args
 
+    def _write_background_distance_diagnostic(self,
+                                              selection: Dict[str, Any],
+                                              result: Dict[str, Any]) -> None:
+        output_path = getattr(self.config, "output_path", None)
+        if output_path is None:
+            return
+
+        diagnostic_dir = os.path.join(
+            str(output_path), "initial", "background_diagnostics")
+        os.makedirs(diagnostic_dir, exist_ok=True)
+        diagnostic_path = os.path.join(
+            diagnostic_dir, "background_distance.txt")
+
+        lines = [
+            "Background Distance Diagnostic",
+            "",
+            "Selection",
+        ]
+        lines.extend([f"  {key}: {value}" for key, value in selection.items()])
+        lines.extend([
+            "",
+            "Result",
+        ])
+        lines.extend([f"  {key}: {value}" for key, value in result.items()])
+
+        with open(diagnostic_path, "w") as f:
+            f.write("\n".join(lines).rstrip() + "\n")
+
     def get_background_camera_distance(self,
                                        masks: torch.Tensor,
                                        camera: TimedCameraSceneNode3D,
@@ -539,13 +567,20 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
             self.boxes = self.load_boxes()
         will_use_boxes = position_strategy is not None and issubclass(
             position_strategy, (BoxPlanePositionStrategy, BorderConditionPlanePositionStrategy))
+        distance_selection = {
+            "boxes_available": len(self.boxes) > 0,
+            "num_boxes": len(self.boxes),
+            "position_strategy": position_strategy.__name__ if position_strategy is not None else None,
+            "will_use_boxes": will_use_boxes,
+            "configured_distance": f"{scalar(self.config.background_camera_distance):.4f}",
+        }
         logger.info(
             "Background distance selection: "
-            f"boxes_available={len(self.boxes) > 0}, "
-            f"num_boxes={len(self.boxes)}, "
-            f"position_strategy={position_strategy.__name__ if position_strategy is not None else None}, "
-            f"will_use_boxes={will_use_boxes}, "
-            f"configured_distance={scalar(self.config.background_camera_distance):.4f}"
+            f"boxes_available={distance_selection['boxes_available']}, "
+            f"num_boxes={distance_selection['num_boxes']}, "
+            f"position_strategy={distance_selection['position_strategy']}, "
+            f"will_use_boxes={distance_selection['will_use_boxes']}, "
+            f"configured_distance={distance_selection['configured_distance']}"
         )
         if len(self.boxes) > 0 and will_use_boxes:
             # Check distance of the boxes to the camera if they are visible
@@ -582,24 +617,44 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                     pass
 
             if self.config.background_camera_distance > max_vis_dist * 2:
+                distance_result = {
+                    "branch": "boxes",
+                    "max_vis_dist": f"{scalar(max_vis_dist):.4f}",
+                    "max_vis_source": max_vis_source,
+                    "returned_distance": f"{scalar(self.config.background_camera_distance):.4f}",
+                    "reason": "config_distance_is_larger",
+                }
+                self._write_background_distance_diagnostic(
+                    distance_selection, distance_result)
                 logger.info(
                     "Background distance result: "
-                    f"branch=boxes, max_vis_dist={scalar(max_vis_dist):.4f}, "
-                    f"max_vis_source={max_vis_source}, "
-                    f"returned_distance={scalar(self.config.background_camera_distance):.4f}, "
-                    "reason=config_distance_is_larger"
+                    f"branch={distance_result['branch']}, "
+                    f"max_vis_dist={distance_result['max_vis_dist']}, "
+                    f"max_vis_source={distance_result['max_vis_source']}, "
+                    f"returned_distance={distance_result['returned_distance']}, "
+                    f"reason={distance_result['reason']}"
                 )
                 return self.config.background_camera_distance
 
             background_dist = max_vis_dist * 2
             logger.warning(
                 f"Background camera distance is smaller than the maximum distance of one box {max_vis_dist:.2f} to the camera. Setting background camera distance to: {background_dist:.2f} (twice the maximum distance).")
+            distance_result = {
+                "branch": "boxes",
+                "max_vis_dist": f"{scalar(max_vis_dist):.4f}",
+                "max_vis_source": max_vis_source,
+                "returned_distance": f"{scalar(background_dist):.4f}",
+                "reason": "twice_max_visible_distance",
+            }
+            self._write_background_distance_diagnostic(
+                distance_selection, distance_result)
             logger.info(
                 "Background distance result: "
-                f"branch=boxes, max_vis_dist={scalar(max_vis_dist):.4f}, "
-                f"max_vis_source={max_vis_source}, "
-                f"returned_distance={scalar(background_dist):.4f}, "
-                "reason=twice_max_visible_distance"
+                f"branch={distance_result['branch']}, "
+                f"max_vis_dist={distance_result['max_vis_dist']}, "
+                f"max_vis_source={distance_result['max_vis_source']}, "
+                f"returned_distance={distance_result['returned_distance']}, "
+                f"reason={distance_result['reason']}"
             )
             return background_dist
         else: #if no bounding boxes
@@ -628,24 +683,44 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                     pass
 
             if self.config.background_camera_distance > max_vis_dist * 2:
+                distance_result = {
+                    "branch": "object_planes",
+                    "max_vis_dist": f"{scalar(max_vis_dist):.4f}",
+                    "max_vis_source": max_vis_source,
+                    "returned_distance": f"{scalar(self.config.background_camera_distance):.4f}",
+                    "reason": "config_distance_is_larger",
+                }
+                self._write_background_distance_diagnostic(
+                    distance_selection, distance_result)
                 logger.info(
                     "Background distance result: "
-                    f"branch=object_planes, max_vis_dist={scalar(max_vis_dist):.4f}, "
-                    f"max_vis_source={max_vis_source}, "
-                    f"returned_distance={scalar(self.config.background_camera_distance):.4f}, "
-                    "reason=config_distance_is_larger"
+                    f"branch={distance_result['branch']}, "
+                    f"max_vis_dist={distance_result['max_vis_dist']}, "
+                    f"max_vis_source={distance_result['max_vis_source']}, "
+                    f"returned_distance={distance_result['returned_distance']}, "
+                    f"reason={distance_result['reason']}"
                 )
                 return self.config.background_camera_distance
 
             background_dist = max_vis_dist * 2
             logger.warning(
                 f"Background camera distance is smaller than the maximum distance of a plane {max_vis_dist:.2f} to the camera. Setting background camera distance to: {background_dist:.2f} (twice the maximum distance).")
+            distance_result = {
+                "branch": "object_planes",
+                "max_vis_dist": f"{scalar(max_vis_dist):.4f}",
+                "max_vis_source": max_vis_source,
+                "returned_distance": f"{scalar(background_dist):.4f}",
+                "reason": "twice_max_visible_distance",
+            }
+            self._write_background_distance_diagnostic(
+                distance_selection, distance_result)
             logger.info(
                 "Background distance result: "
-                f"branch=object_planes, max_vis_dist={scalar(max_vis_dist):.4f}, "
-                f"max_vis_source={max_vis_source}, "
-                f"returned_distance={scalar(background_dist):.4f}, "
-                "reason=twice_max_visible_distance"
+                f"branch={distance_result['branch']}, "
+                f"max_vis_dist={distance_result['max_vis_dist']}, "
+                f"max_vis_source={distance_result['max_vis_source']}, "
+                f"returned_distance={distance_result['returned_distance']}, "
+                f"reason={distance_result['reason']}"
             )
             return background_dist
         # else:

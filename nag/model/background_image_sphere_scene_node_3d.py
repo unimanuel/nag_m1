@@ -14,6 +14,7 @@ coordinates, compute equirectangular UV, and then reuse the existing image/flow
 networks.
 """
 
+import os
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -28,6 +29,26 @@ from tools.util.typing import DEFAULT, VEC_TYPE
 from tools.logger.logging import logger
 
 from nag.model.sphere_utils import direction_to_equirect_uv, equirect_uv_to_direction, normalize
+
+
+def _write_sphere_geometry_diagnostic(config: Any, geometry: Dict[str, Any]) -> None:
+    output_path = getattr(config, "output_path", None)
+    if output_path is None:
+        return
+
+    diagnostic_dir = os.path.join(
+        str(output_path), "initial", "background_diagnostics")
+    os.makedirs(diagnostic_dir, exist_ok=True)
+    diagnostic_path = os.path.join(diagnostic_dir, "sphere_geometry.txt")
+
+    lines = [
+        "Sphere Background Geometry Diagnostic",
+        "",
+    ]
+    lines.extend([f"{key}: {value}" for key, value in geometry.items()])
+
+    with open(diagnostic_path, "w") as f:
+        f.write("\n".join(lines).rstrip() + "\n")
 
 
 class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
@@ -418,14 +439,23 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         max_cam_dist = (cam_positions - center[None, :]).norm(dim=-1).max()
         # Conservative radius: trajectory radius + cutoff distance (+ margin)
         radius = (max_cam_dist + float(scene_cutoff_distance)) * (1.0 + float(relative_scale_margin))
+        sphere_geometry = {
+            "max_cam_dist": f"{float(max_cam_dist.detach().cpu().item()):.4f}",
+            "scene_cutoff_distance": f"{float(scene_cutoff_distance):.4f}",
+            "relative_scale_margin": f"{float(relative_scale_margin):.4f}",
+            "radius": f"{float(radius.detach().cpu().item()):.4f}",
+            "center": [round(float(v), 4) for v in center.detach().cpu().tolist()],
+            "color_mask_resolution": color_mask_resolution,
+        }
+        _write_sphere_geometry_diagnostic(config, sphere_geometry)
         logger.info(
             "Sphere background geometry: "
-            f"max_cam_dist={float(max_cam_dist.detach().cpu().item()):.4f}, "
-            f"scene_cutoff_distance={float(scene_cutoff_distance):.4f}, "
-            f"relative_scale_margin={float(relative_scale_margin):.4f}, "
-            f"radius={float(radius.detach().cpu().item()):.4f}, "
-            f"center={[round(float(v), 4) for v in center.detach().cpu().tolist()]}, "
-            f"color_mask_resolution={color_mask_resolution}"
+            f"max_cam_dist={sphere_geometry['max_cam_dist']}, "
+            f"scene_cutoff_distance={sphere_geometry['scene_cutoff_distance']}, "
+            f"relative_scale_margin={sphere_geometry['relative_scale_margin']}, "
+            f"radius={sphere_geometry['radius']}, "
+            f"center={sphere_geometry['center']}, "
+            f"color_mask_resolution={sphere_geometry['color_mask_resolution']}"
         )
 
         if proxy_init:
