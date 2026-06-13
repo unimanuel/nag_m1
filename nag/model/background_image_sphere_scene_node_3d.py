@@ -399,6 +399,7 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         correct_lens_distortion: bool = False,
         proxy_init: bool = False,
         sphere_uv_y_flip: bool = False,
+        sphere_radius_override: Optional[float] = None,
         **kwargs,
     ):
         """Initialize a spherical background.
@@ -438,11 +439,34 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         center = cam_positions.mean(dim=0)
         max_cam_dist = (cam_positions - center[None, :]).norm(dim=-1).max()
         # Conservative radius: trajectory radius + cutoff distance (+ margin)
-        radius = (max_cam_dist + float(scene_cutoff_distance)) * (1.0 + float(relative_scale_margin))
+        computed_radius = (max_cam_dist + float(scene_cutoff_distance)) * (1.0 + float(relative_scale_margin))
+        radius = computed_radius
+        radius_source = "computed"
+        override_value = None
+        if sphere_radius_override is not None:
+            override_radius = tensorify(sphere_radius_override, dtype=dtype, device=times.device)
+            if override_radius.numel() != 1:
+                raise ValueError("sphere_radius_override must be a scalar value.")
+            override_radius = override_radius.reshape(())
+            if not torch.isfinite(override_radius):
+                raise ValueError(f"sphere_radius_override must be finite, got {sphere_radius_override}.")
+            if override_radius <= 0:
+                raise ValueError(f"sphere_radius_override must be positive, got {float(override_radius.detach().cpu().item()):.4f}.")
+            if override_radius <= max_cam_dist.to(dtype=override_radius.dtype, device=override_radius.device):
+                raise ValueError(
+                    "sphere_radius_override must be greater than max_cam_dist "
+                    f"({float(max_cam_dist.detach().cpu().item()):.4f}), got {float(override_radius.detach().cpu().item()):.4f}."
+                )
+            radius = override_radius
+            radius_source = "override"
+            override_value = f"{float(override_radius.detach().cpu().item()):.4f}"
         sphere_geometry = {
             "max_cam_dist": f"{float(max_cam_dist.detach().cpu().item()):.4f}",
             "scene_cutoff_distance": f"{float(scene_cutoff_distance):.4f}",
             "relative_scale_margin": f"{float(relative_scale_margin):.4f}",
+            "computed_radius": f"{float(computed_radius.detach().cpu().item()):.4f}",
+            "sphere_radius_override": override_value,
+            "radius_source": radius_source,
             "radius": f"{float(radius.detach().cpu().item()):.4f}",
             "center": [round(float(v), 4) for v in center.detach().cpu().tolist()],
             "color_mask_resolution": color_mask_resolution,
@@ -453,6 +477,9 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
             f"max_cam_dist={sphere_geometry['max_cam_dist']}, "
             f"scene_cutoff_distance={sphere_geometry['scene_cutoff_distance']}, "
             f"relative_scale_margin={sphere_geometry['relative_scale_margin']}, "
+            f"computed_radius={sphere_geometry['computed_radius']}, "
+            f"sphere_radius_override={sphere_geometry['sphere_radius_override']}, "
+            f"radius_source={sphere_geometry['radius_source']}, "
             f"radius={sphere_geometry['radius']}, "
             f"center={sphere_geometry['center']}, "
             f"color_mask_resolution={sphere_geometry['color_mask_resolution']}"

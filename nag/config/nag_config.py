@@ -335,6 +335,9 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     background_relative_scale_margin: float = field(default=0.1)
     """Relative margin for the background plane which will extend the ray hittable area of the background plane in addition to the camera image."""
 
+    background_sphere_radius_override: Optional[float] = field(default=None)
+    """Optional final radius override for spherical backgrounds. If set, it can be used from the CLI to test a fixed sphere radius without changing YAML files."""
+
     is_background_color_learnable: bool = field(default=True)
     """If the background color should be learnable."""
 

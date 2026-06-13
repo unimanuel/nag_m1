@@ -266,6 +266,7 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         correct_lens_distortion: bool = False,
         proxy_init: bool = False,
         sphere_uv_y_flip: bool = False,
+        sphere_radius_override: Optional[float] = None,
         **kwargs,
     ):
         # Reuse the shared spherical init logic so view-dependent and plain
@@ -292,5 +293,6 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
             correct_lens_distortion=correct_lens_distortion,
             proxy_init=proxy_init,
             sphere_uv_y_flip=sphere_uv_y_flip,
+            sphere_radius_override=sphere_radius_override,
             **kwargs,
         )
