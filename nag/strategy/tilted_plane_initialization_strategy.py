@@ -313,6 +313,75 @@ def _projected_box_at_largest_mask(box: Any,
         return None
 
 
+def _format_min_mean_max(summary: Dict[str, Any]) -> str:
+    return f"min={summary.get('min')}, mean={summary.get('mean')}, max={summary.get('max')}"
+
+
+def _format_object_placement_diagnostic(diagnostic: Dict[str, Any]) -> str:
+    lines = [
+        f"Object {diagnostic.get('object_index')} | mask_id={diagnostic.get('mask_id')} | name={diagnostic.get('name')}",
+        f"  mask_index: {diagnostic.get('mask_index')}",
+        f"  has_bbox: {diagnostic.get('has_bbox')}",
+        f"  position_strategy_requested: {diagnostic.get('position_strategy_requested')}",
+        f"  position_strategy_effective: {diagnostic.get('position_strategy_effective')}",
+        f"  border_condition_opposing_touch: {diagnostic.get('border_condition_opposing_touch')}",
+        f"  largest_mask_idx: {diagnostic.get('largest_mask_idx')}",
+        f"  visible_frame_count: {diagnostic.get('visible_frame_count')}",
+        f"  missing_frame_count: {diagnostic.get('missing_frame_count')}",
+    ]
+
+    mask_bbox = diagnostic.get("mask_bbox_largest_frame", {})
+    lines.extend([
+        "  mask_bbox_largest_frame:",
+        f"    bottom_left_yx: {mask_bbox.get('bottom_left_yx')}",
+        f"    top_right_yx: {mask_bbox.get('top_right_yx')}",
+        f"    size_hw: {mask_bbox.get('size_hw')}",
+        f"    area_px: {mask_bbox.get('area_px')}",
+        f"  plane_scale_xy: {diagnostic.get('plane_scale_xy')}",
+        f"  translation_mean_xyz: {diagnostic.get('translation_mean_xyz')}",
+        f"  translation_first_xyz: {diagnostic.get('translation_first_xyz')}",
+        f"  translation_last_xyz: {diagnostic.get('translation_last_xyz')}",
+        "  camera_plane_distance: "
+        f"{_format_min_mean_max(diagnostic.get('camera_plane_distance_min_mean_max', {}))}",
+    ])
+
+    if diagnostic.get("has_bbox"):
+        lines.extend([
+            f"  bbox_object_id: {diagnostic.get('bbox_object_id')}",
+            f"  bbox_id: {diagnostic.get('bbox_id')}",
+            f"  bbox_frame_match_count: {diagnostic.get('bbox_frame_match_count')}",
+            f"  bbox_center_first_xyz: {diagnostic.get('bbox_center_first_xyz')}",
+            f"  bbox_center_last_xyz: {diagnostic.get('bbox_center_last_xyz')}",
+            "  bbox_camera_distance: "
+            f"{_format_min_mean_max(diagnostic.get('bbox_camera_distance_min_mean_max', {}))}",
+            "  plane_vs_bbox_center_distance: "
+            f"{_format_min_mean_max(diagnostic.get('plane_vs_bbox_center_distance_min_mean_max', {}))}",
+        ])
+        projected = diagnostic.get("bbox_projected_largest_frame")
+        if projected is not None:
+            lines.extend([
+                "  bbox_projected_largest_frame:",
+                f"    ll_xy: {projected.get('ll_xy')}",
+                f"    tr_xy: {projected.get('tr_xy')}",
+                f"    size_wh: {projected.get('size_wh')}",
+                f"    area_px: {projected.get('area_px')}",
+            ])
+
+    return "\n".join(lines)
+
+
+def _format_object_placement_diagnostics(diagnostics: Any) -> str:
+    lines = [
+        "Object Placement Diagnostics",
+        f"object_count: {len(diagnostics)}",
+        "",
+    ]
+    for diagnostic in diagnostics:
+        lines.append(_format_object_placement_diagnostic(diagnostic))
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _record_object_placement_diagnostic(object_index: int,
                                         mask_index: int,
                                         name: Optional[str],
@@ -417,17 +486,13 @@ def _record_object_placement_diagnostic(object_index: int,
     with open(diagnostic_path, "w") as f:
         json.dump({"version": 1, "objects": diagnostics}, f, indent=2)
 
-    distance_summary = diagnostic["camera_plane_distance_min_mean_max"]
+    text_path = os.path.join(diagnostic_dir, "placement_summary.txt")
+    with open(text_path, "w") as f:
+        f.write(_format_object_placement_diagnostics(diagnostics))
+
     logger.info(
-        "Object placement diagnostic: "
-        f"object_index={object_index}, "
-        f"mask_id={diagnostic['mask_id']}, "
-        f"name={name}, "
-        f"has_bbox={diagnostic['has_bbox']}, "
-        f"strategy={requested_strategy}->{effective_strategy}, "
-        f"plane_scale_xy={diagnostic['plane_scale_xy']}, "
-        f"camera_plane_distance_mean={distance_summary['mean']}, "
-        f"camera_plane_distance_max={distance_summary['max']}"
+        "Object placement diagnostic:\n"
+        + _format_object_placement_diagnostic(diagnostic)
     )
 
 
