@@ -1,3 +1,5 @@
+import json
+import math
 import os
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -6,7 +8,7 @@ from matplotlib.axes import Axes
 from tools.logger.logging import logger
 from tools.transforms.min_max import MinMax
 from tools.util.format import parse_type
-from tools.util.torch import (flatten_batch_dims, tensorify,
+from tools.util.torch import (flatten_batch_dims, index_of_first, tensorify,
                               unflatten_batch_dims)
 from tools.util.typing import DEFAULT, VEC_TYPE
 from tools.viz.matplotlib import saveable
@@ -186,6 +188,249 @@ def mask_to_camera_coordinates(uv: torch.Tensor,
     return unflatten_batch_dims(re_uv * camera_max, shape)
 
 
+def _to_json_value(value: Any, precision: int = 4) -> Any:
+    if torch.is_tensor(value):
+        value = value.detach().cpu()
+        if value.numel() == 1:
+            return _to_json_value(value.item(), precision=precision)
+        return _to_json_value(value.tolist(), precision=precision)
+    if isinstance(value, dict):
+        return {str(k): _to_json_value(v, precision=precision) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_value(v, precision=precision) for v in value]
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return round(value, precision)
+    if hasattr(value, "item"):
+        try:
+            return _to_json_value(value.item(), precision=precision)
+        except Exception:
+            pass
+    return str(value)
+
+
+def _numeric_summary(values: Optional[torch.Tensor]) -> Dict[str, Any]:
+    if values is None:
+        return {"min": None, "mean": None, "max": None}
+    if not torch.is_tensor(values):
+        values = torch.as_tensor(values)
+    values = values.detach().float().cpu().flatten()
+    values = values[torch.isfinite(values)]
+    if values.numel() == 0:
+        return {"min": None, "mean": None, "max": None}
+    return _to_json_value({
+        "min": values.min().item(),
+        "mean": values.mean().item(),
+        "max": values.max().item(),
+    })
+
+
+def _safe_int(value: Any, default: Optional[int] = None) -> Optional[int]:
+    try:
+        if torch.is_tensor(value):
+            value = value.detach().cpu().item()
+        return int(value)
+    except Exception:
+        return default
+
+
+def _get_mask_id(dataset: NAGDataset, mask_index: int) -> int:
+    try:
+        return _safe_int(dataset.mask_ids[mask_index], default=mask_index)
+    except Exception:
+        return mask_index
+
+
+def _infer_effective_position_strategy(position_strategy: PlanePositionStrategy,
+                                       mask: torch.Tensor,
+                                       box: Any) -> Tuple[str, str, Optional[bool]]:
+    requested = position_strategy.__class__.__name__
+    if requested == "BoxPlanePositionStrategy":
+        return requested, "BoxPlanePositionStrategy", None
+    if requested != "BorderConditionPlanePositionStrategy":
+        return requested, requested, None
+    if box is not None and getattr(position_strategy, "box_available", False):
+        return requested, "BoxPlanePositionStrategy", None
+
+    try:
+        bth = position_strategy.border_padding_threshold
+        cmasks = mask[:, :, bth:-bth, bth:-bth]
+        if cmasks.shape[-1] == 0 or cmasks.shape[-2] == 0:
+            return requested, "BorderConditionPlanePositionStrategy(undetermined_empty_crop)", None
+        hit_left = cmasks[..., 0].any(dim=(-1, -2))
+        hit_right = cmasks[..., -1].any(dim=(-1, -2))
+        hit_top = cmasks[..., 0, :].any(dim=(-1, -2))
+        hit_bottom = cmasks[..., -1, :].any(dim=(-1, -2))
+        opposing_touch = torch.stack(
+            [(hit_left & hit_right).any(), (hit_top & hit_bottom).any()], dim=-1)
+        opposing_touch_any = bool(opposing_touch.any().detach().cpu().item())
+        effective = "FixedPlanePositionStrategy" if opposing_touch_any else "InImagePlanePositionStrategy"
+        return requested, effective, opposing_touch_any
+    except Exception as e:
+        logger.warning(
+            f"Could not infer effective border-condition plane position strategy: {e}")
+        return requested, "BorderConditionPlanePositionStrategy(undetermined_error)", None
+
+
+def _get_box_centers_at_times(box: Any,
+                              times: torch.Tensor,
+                              dtype: torch.dtype,
+                              device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
+    box_times = torch.as_tensor(box.frame_times, dtype=times.dtype, device=device)
+    box_centers = torch.as_tensor(box.center, dtype=dtype, device=device)
+    box_indices = index_of_first(box_times, times).to(device=device)
+    return box_centers, box_indices
+
+
+def _projected_box_at_largest_mask(box: Any,
+                                   times: torch.Tensor,
+                                   largest_mask_idx: int) -> Optional[Dict[str, Any]]:
+    projected_label = getattr(box, "projected_label", None)
+    if projected_label is None or not hasattr(projected_label, "get_ll_tr"):
+        return None
+    try:
+        label_times = torch.as_tensor(
+            projected_label.frame_times, dtype=times.dtype, device=times.device)
+        label_indices = index_of_first(label_times, times)
+        label_idx = _safe_int(label_indices[largest_mask_idx], default=-1)
+        if label_idx is None or label_idx < 0:
+            return None
+        ll_tr = projected_label.get_ll_tr()[label_idx]
+        size_xy = ll_tr[1] - ll_tr[0]
+        return _to_json_value({
+            "ll_xy": ll_tr[0].tolist(),
+            "tr_xy": ll_tr[1].tolist(),
+            "size_wh": size_xy.tolist(),
+            "area_px": float(size_xy[0] * size_xy[1]),
+        })
+    except Exception as e:
+        logger.warning(f"Could not record projected bbox diagnostic: {e}")
+        return None
+
+
+def _record_object_placement_diagnostic(object_index: int,
+                                        mask_index: int,
+                                        name: Optional[str],
+                                        mask: torch.Tensor,
+                                        times: torch.Tensor,
+                                        camera: TimedCameraSceneNode3D,
+                                        dataset: NAGDataset,
+                                        config: NAGConfig,
+                                        mask_properties: BasicMaskProperties,
+                                        position_strategy: PlanePositionStrategy,
+                                        global_plane_position: torch.Tensor,
+                                        global_plane_center: torch.Tensor,
+                                        plane_scale: torch.Tensor,
+                                        dtype: torch.dtype,
+                                        device: torch.device,
+                                        **kwargs) -> None:
+    runner = kwargs.get("runner", None)
+    output_path = getattr(config, "output_path", None)
+    if output_path is None:
+        return
+
+    box = kwargs.get("box", None)
+    requested_strategy, effective_strategy, opposing_touch = _infer_effective_position_strategy(
+        position_strategy, mask, box)
+    largest_mask_idx = _safe_int(mask_properties.largest_mask_idx, default=0)
+    missing_in_frame = mask_properties.missing_in_frame.detach().bool()
+    visible = ~missing_in_frame
+
+    bottom_left = mask_properties.bottom_left[largest_mask_idx]
+    top_right = mask_properties.top_right[largest_mask_idx]
+    size_hw = top_right - bottom_left
+    mask_area_px = mask_properties.mask_sizes[largest_mask_idx].squeeze()
+
+    camera_positions = camera.get_global_position(t=times)[:, :3, 3].detach()
+    plane_positions_at_times = global_plane_position[:, :3, 3].detach()
+    camera_plane_distances = torch.norm(
+        camera_positions[visible] - plane_positions_at_times[visible], dim=-1)
+
+    diagnostic = {
+        "object_index": object_index,
+        "mask_index": mask_index,
+        "mask_id": _get_mask_id(dataset, mask_index),
+        "name": name,
+        "has_bbox": box is not None,
+        "position_strategy_requested": requested_strategy,
+        "position_strategy_effective": effective_strategy,
+        "border_condition_opposing_touch": opposing_touch,
+        "largest_mask_idx": largest_mask_idx,
+        "missing_frame_count": _safe_int(missing_in_frame.sum(), default=0),
+        "visible_frame_count": _safe_int(visible.sum(), default=0),
+        "mask_bbox_largest_frame": {
+            "bottom_left_yx": bottom_left,
+            "top_right_yx": top_right,
+            "size_hw": size_hw,
+            "area_px": mask_area_px,
+        },
+        "plane_scale_xy": plane_scale.detach().flatten()[:2],
+        "translation_mean_xyz": global_plane_center.detach().mean(dim=0),
+        "translation_first_xyz": global_plane_center.detach()[0],
+        "translation_last_xyz": global_plane_center.detach()[-1],
+        "camera_plane_distance_min_mean_max": _numeric_summary(camera_plane_distances),
+    }
+
+    if box is not None:
+        try:
+            box_centers, box_indices = _get_box_centers_at_times(
+                box, times, dtype=dtype, device=device)
+            box_visible = visible & (box_indices >= 0)
+            box_centers_at_times = box_centers[box_indices[box_visible]]
+            bbox_camera_distances = torch.norm(
+                camera_positions[box_visible] - box_centers_at_times, dim=-1)
+            plane_bbox_center_distances = torch.norm(
+                plane_positions_at_times[box_visible] - box_centers_at_times, dim=-1)
+            diagnostic.update({
+                "bbox_object_id": _safe_int(getattr(box, "object_id", None)),
+                "bbox_id": getattr(box, "id", None),
+                "bbox_center_first_xyz": box_centers[0] if len(box_centers) > 0 else None,
+                "bbox_center_last_xyz": box_centers[-1] if len(box_centers) > 0 else None,
+                "bbox_camera_distance_min_mean_max": _numeric_summary(bbox_camera_distances),
+                "plane_vs_bbox_center_distance_min_mean_max": _numeric_summary(plane_bbox_center_distances),
+                "bbox_frame_match_count": _safe_int(box_visible.sum(), default=0),
+                "bbox_projected_largest_frame": _projected_box_at_largest_mask(
+                    box, times, largest_mask_idx),
+            })
+        except Exception as e:
+            logger.warning(
+                f"Could not record bbox placement diagnostic for object {object_index}: {e}")
+
+    diagnostic = _to_json_value(diagnostic)
+
+    if runner is not None:
+        if not hasattr(runner, "object_placement_diagnostics"):
+            runner.object_placement_diagnostics = []
+        runner.object_placement_diagnostics.append(diagnostic)
+        diagnostics = runner.object_placement_diagnostics
+    else:
+        diagnostics = [diagnostic]
+
+    diagnostic_dir = os.path.join(str(output_path), "initial", "object_placement")
+    os.makedirs(diagnostic_dir, exist_ok=True)
+    diagnostic_path = os.path.join(diagnostic_dir, "placement_summary.json")
+    with open(diagnostic_path, "w") as f:
+        json.dump({"version": 1, "objects": diagnostics}, f, indent=2)
+
+    distance_summary = diagnostic["camera_plane_distance_min_mean_max"]
+    logger.info(
+        "Object placement diagnostic: "
+        f"object_index={object_index}, "
+        f"mask_id={diagnostic['mask_id']}, "
+        f"name={name}, "
+        f"has_bbox={diagnostic['has_bbox']}, "
+        f"strategy={requested_strategy}->{effective_strategy}, "
+        f"plane_scale_xy={diagnostic['plane_scale_xy']}, "
+        f"camera_plane_distance_mean={distance_summary['mean']}, "
+        f"camera_plane_distance_max={distance_summary['max']}"
+    )
+
+
 class TiltedPlaneInitializationStrategy(PlaneInitializationStrategy):
     """Simple plane initialization strategy:
     1. Planes have a rotation, depending on the depth mask.
@@ -326,6 +571,24 @@ class TiltedPlaneInitializationStrategy(PlaneInitializationStrategy):
             plane_properties["orientation"] = global_plane_quat
             plane_properties["plane_scale"] = plane_scale
             plane_properties["flow_reference_time"] = times[largest_mask_idx]
+            _record_object_placement_diagnostic(
+                object_index=object_index,
+                mask_index=mask_index,
+                name=name,
+                mask=mask,
+                times=times,
+                camera=camera,
+                dataset=dataset,
+                config=config,
+                mask_properties=mask_properties,
+                position_strategy=position_strategy,
+                global_plane_position=global_plane_position,
+                global_plane_center=global_plane_center,
+                plane_scale=plane_scale,
+                dtype=dtype,
+                device=device,
+                **kwargs,
+            )
 
             plane_type = parse_type(
                 config.plane_type, LearnedImagePlaneSceneNode3D)
