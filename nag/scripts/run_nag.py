@@ -41,10 +41,32 @@ def get_config() -> NAGConfig:
     parser = argparse.ArgumentParser(
         description='Performs a SceneNSF training run.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    config: NAGConfig = NAGConfig.parse_args(parser)
-    cli_sphere_radius_override = _parse_cli_sphere_radius_override(sys.argv[1:])
+    argv = sys.argv[1:]
+    cli_sphere_radius_from_visible_plane_corners = \
+        _parse_cli_sphere_radius_from_visible_plane_corners(argv)
+    parser_argv = _strip_cli_sphere_radius_from_visible_plane_corners(argv)
+    original_sys_argv = sys.argv
+    try:
+        sys.argv = [sys.argv[0], *parser_argv]
+        config: NAGConfig = NAGConfig.parse_args(parser)
+    finally:
+        sys.argv = original_sys_argv
+
+    cli_sphere_radius_override = _parse_cli_sphere_radius_override(argv)
+    if cli_sphere_radius_from_visible_plane_corners and (
+        cli_sphere_radius_override is not None or
+        config.background_sphere_radius_override is not None
+    ):
+        raise ValueError(
+            "--background-sphere-radius-from-visible-plane-corners cannot be "
+            "combined with background_sphere_radius_override or "
+            "--background-sphere-radius-override because both define the final "
+            "spherical background radius."
+        )
     if cli_sphere_radius_override is not None:
         config.background_sphere_radius_override = cli_sphere_radius_override
+    if cli_sphere_radius_from_visible_plane_corners:
+        setattr(config, "background_sphere_radius_from_visible_plane_corners", True)
 
     return config
 
@@ -59,6 +81,21 @@ def _parse_cli_sphere_radius_override(argv) -> Optional[float]:
         if arg.startswith(flag + "="):
             return float(arg.split("=", 1)[1])
     return None
+
+
+def _parse_cli_sphere_radius_from_visible_plane_corners(argv) -> bool:
+    flag = "--background-sphere-radius-from-visible-plane-corners"
+    for arg in argv:
+        if arg == flag:
+            return True
+        if arg.startswith(flag + "="):
+            raise ValueError(f"{flag} is a boolean flag and does not take a value.")
+    return False
+
+
+def _strip_cli_sphere_radius_from_visible_plane_corners(argv):
+    flag = "--background-sphere-radius-from-visible-plane-corners"
+    return [arg for arg in argv if arg != flag]
 
 
 def main(config: NAGConfig):

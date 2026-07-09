@@ -400,6 +400,7 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         proxy_init: bool = False,
         sphere_uv_y_flip: bool = False,
         sphere_radius_override: Optional[float] = None,
+        sphere_radius_override_source: Optional[str] = None,
         **kwargs,
     ):
         """Initialize a spherical background.
@@ -458,7 +459,7 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
                     f"({float(max_cam_dist.detach().cpu().item()):.4f}), got {float(override_radius.detach().cpu().item()):.4f}."
                 )
             radius = override_radius
-            radius_source = "override"
+            radius_source = sphere_radius_override_source or "override"
             override_value = f"{float(override_radius.detach().cpu().item()):.4f}"
         sphere_geometry = {
             "max_cam_dist": f"{float(max_cam_dist.detach().cpu().item()):.4f}",
