@@ -3,6 +3,7 @@ import argparse
 import logging  # noqa
 import os
 import sys
+from typing import Optional
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TOOLS_ROOT = os.path.join(REPO_ROOT, "tools")
@@ -41,8 +42,23 @@ def get_config() -> NAGConfig:
         description='Performs a SceneNSF training run.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     config: NAGConfig = NAGConfig.parse_args(parser)
+    cli_sphere_radius_override = _parse_cli_sphere_radius_override(sys.argv[1:])
+    if cli_sphere_radius_override is not None:
+        config.background_sphere_radius_override = cli_sphere_radius_override
 
     return config
+
+
+def _parse_cli_sphere_radius_override(argv) -> Optional[float]:
+    flag = "--background-sphere-radius-override"
+    for idx, arg in enumerate(argv):
+        if arg == flag:
+            if idx + 1 >= len(argv):
+                raise ValueError(f"{flag} requires a float value.")
+            return float(argv[idx + 1])
+        if arg.startswith(flag + "="):
+            return float(arg.split("=", 1)[1])
+    return None
 
 
 def main(config: NAGConfig):

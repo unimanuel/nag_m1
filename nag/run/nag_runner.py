@@ -993,9 +993,6 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
         return background_type
 
     def _get_background_init_kwargs(self, plane_type: Type[BackgroundPlaneSceneNode3D]) -> Dict[str, Any]:
-        from nag.model.background_image_sphere_scene_node_3d import \
-            BackgroundImageSphereSceneNode3D
-
         if issubclass(plane_type, BackgroundImagePlaneSceneNode3D):
             args = dict(
                 **self.config.background_plane_kwargs if self.config.background_plane_kwargs is not None else dict(),
@@ -1003,7 +1000,7 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
             args["rgb_weight"] = self.config.plane_color_weight
             args["flow_weight"] = self.config.plane_flow_weight
             args["deprecated_flow"] = self.config.deprecated_flow
-            if self.config.background_sphere_radius_override is not None and issubclass(plane_type, BackgroundImageSphereSceneNode3D):
+            if self.config.background_sphere_radius_override is not None and getattr(plane_type, "is_spherical_background", False):
                 args["sphere_radius_override"] = self.config.background_sphere_radius_override
             return args
         else:
