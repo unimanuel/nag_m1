@@ -44,7 +44,9 @@ def get_config() -> NAGConfig:
     argv = sys.argv[1:]
     cli_sphere_radius_from_visible_plane_corners = \
         _parse_cli_sphere_radius_from_visible_plane_corners(argv)
-    parser_argv = _strip_cli_sphere_radius_from_visible_plane_corners(argv)
+    cli_sphere_radius_from_visible_plane_centers = \
+        _parse_cli_sphere_radius_from_visible_plane_centers(argv)
+    parser_argv = _strip_cli_only_sphere_radius_flags(argv)
     original_sys_argv = sys.argv
     try:
         sys.argv = [sys.argv[0], *parser_argv]
@@ -53,20 +55,25 @@ def get_config() -> NAGConfig:
         sys.argv = original_sys_argv
 
     cli_sphere_radius_override = _parse_cli_sphere_radius_override(argv)
-    if cli_sphere_radius_from_visible_plane_corners and (
-        cli_sphere_radius_override is not None or
-        config.background_sphere_radius_override is not None
-    ):
+    cli_sphere_radius_mode_count = sum([
+        cli_sphere_radius_from_visible_plane_corners,
+        cli_sphere_radius_from_visible_plane_centers,
+        cli_sphere_radius_override is not None or config.background_sphere_radius_override is not None,
+    ])
+    if cli_sphere_radius_mode_count > 1:
         raise ValueError(
-            "--background-sphere-radius-from-visible-plane-corners cannot be "
-            "combined with background_sphere_radius_override or "
-            "--background-sphere-radius-override because both define the final "
-            "spherical background radius."
+            "Only one spherical background radius mode can be active. Do not "
+            "combine --background-sphere-radius-from-visible-plane-corners, "
+            "--background-sphere-radius-from-visible-plane-centers, "
+            "background_sphere_radius_override, or "
+            "--background-sphere-radius-override."
         )
     if cli_sphere_radius_override is not None:
         config.background_sphere_radius_override = cli_sphere_radius_override
     if cli_sphere_radius_from_visible_plane_corners:
         setattr(config, "background_sphere_radius_from_visible_plane_corners", True)
+    if cli_sphere_radius_from_visible_plane_centers:
+        setattr(config, "background_sphere_radius_from_visible_plane_centers", True)
 
     return config
 
@@ -93,9 +100,22 @@ def _parse_cli_sphere_radius_from_visible_plane_corners(argv) -> bool:
     return False
 
 
-def _strip_cli_sphere_radius_from_visible_plane_corners(argv):
-    flag = "--background-sphere-radius-from-visible-plane-corners"
-    return [arg for arg in argv if arg != flag]
+def _parse_cli_sphere_radius_from_visible_plane_centers(argv) -> bool:
+    flag = "--background-sphere-radius-from-visible-plane-centers"
+    for arg in argv:
+        if arg == flag:
+            return True
+        if arg.startswith(flag + "="):
+            raise ValueError(f"{flag} is a boolean flag and does not take a value.")
+    return False
+
+
+def _strip_cli_only_sphere_radius_flags(argv):
+    flags = {
+        "--background-sphere-radius-from-visible-plane-corners",
+        "--background-sphere-radius-from-visible-plane-centers",
+    }
+    return [arg for arg in argv if arg not in flags]
 
 
 def main(config: NAGConfig):

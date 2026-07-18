@@ -570,6 +570,28 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
         with open(diagnostic_path, "w") as f:
             f.write("\n".join(lines).rstrip() + "\n")
 
+    def _write_visible_plane_center_sphere_radius_diagnostic(self,
+                                                             result: Dict[str, Any]) -> None:
+        output_path = getattr(self.config, "output_path", None)
+        if output_path is None:
+            return
+
+        diagnostic_dir = os.path.join(
+            str(output_path), "initial", "background_diagnostics")
+        os.makedirs(diagnostic_dir, exist_ok=True)
+        diagnostic_path = os.path.join(
+            diagnostic_dir, "visible_plane_center_sphere_radius.txt")
+
+        lines = [
+            "Visible Plane Center Sphere Radius Diagnostic",
+            "",
+            "Result",
+        ]
+        lines.extend([f"  {key}: {value}" for key, value in result.items()])
+
+        with open(diagnostic_path, "w") as f:
+            f.write("\n".join(lines).rstrip() + "\n")
+
     def _compute_visible_plane_corner_sphere_radius(self,
                                                     masks: torch.Tensor,
                                                     camera: TimedCameraSceneNode3D,
@@ -752,6 +774,232 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
             f"required_radius_before_epsilon={diagnostic_result['required_radius_before_epsilon']}, "
             f"epsilon={diagnostic_result['epsilon']}, "
             f"final_radius={diagnostic_result['final_radius']}, "
+            "bbox_corner_dist_diagnostic_only="
+            f"{diagnostic_result['max_visible_bbox_corner_dist_diagnostic_only']}"
+        )
+        return scalar(final_radius)
+
+    def _compute_visible_plane_center_sphere_radius(self,
+                                                    masks: torch.Tensor,
+                                                    camera: TimedCameraSceneNode3D,
+                                                    world: TimedDiscreteSceneNode3D,
+                                                    ) -> float:
+        from tools.util.torch import index_of_first
+
+        def scalar(v: Union[float, torch.Tensor]) -> float:
+            if torch.is_tensor(v):
+                return float(v.detach().cpu().item())
+            return float(v)
+
+        times = self.dataset.frame_timestamps
+        cam_positions = camera.get_global_position(t=times)[:, :3, 3].detach()
+        center = cam_positions.mean(dim=0)
+        max_cam_dist = (cam_positions - center[None, :]).norm(dim=-1).max()
+
+        max_plane_center_dist = None
+        max_plane_center_source = None
+        num_visible_plane_center_samples = 0
+
+        max_plane_corner_dist = None
+        max_plane_corner_source = None
+        plane_corner_diagnostic_error = None
+        num_visible_plane_corner_samples = 0
+
+        if world is None:
+            raise ValueError(
+                "Cannot compute visible plane-center sphere radius without a world.")
+
+        for obj in world.get_scene_children():
+            if not isinstance(obj, LearnedImagePlaneSceneNode3D):
+                continue
+
+            idx = obj.get_index()
+            missing_in_frame = masks[:, idx].sum(dim=(-2, -1)).squeeze() == 0
+            existing_times = times[~missing_in_frame]
+            if existing_times.numel() == 0:
+                continue
+
+            if not hasattr(obj, "get_global_position"):
+                raise ValueError(
+                    "Visible plane-center sphere radius mode requires every "
+                    "visible foreground plane to expose get_global_position(); "
+                    f"object index {idx} does not."
+                )
+
+            plane_centers = obj.get_global_position(t=existing_times)[:, :3, 3].detach()
+            if plane_centers.numel() == 0:
+                continue
+            if not torch.isfinite(plane_centers).all():
+                raise ValueError(
+                    "Visible plane-center sphere radius mode received non-finite "
+                    f"plane centers for object index {idx}."
+                )
+
+            center_for_plane_centers = center.to(
+                dtype=plane_centers.dtype, device=plane_centers.device)
+            center_dists = (plane_centers - center_for_plane_centers[None, :]).norm(dim=-1)
+            num_visible_plane_center_samples += int(center_dists.numel())
+            dist_max = center_dists.max()
+            if max_plane_center_dist is None or dist_max > max_plane_center_dist:
+                time_idx = int(torch.argmax(center_dists).detach().cpu().item())
+                max_plane_center_dist = dist_max
+                max_plane_center_source = {
+                    "object_index": idx,
+                    "frame_time": scalar(existing_times[time_idx]),
+                }
+
+            try:
+                if not hasattr(obj, "get_plane_corners") or not hasattr(obj, "local_to_global"):
+                    raise ValueError(
+                        f"object index {idx} does not expose get_plane_corners() "
+                        "and local_to_global()."
+                    )
+                local_corners = obj.get_plane_corners()
+                if local_corners is None:
+                    raise ValueError(
+                        f"object index {idx} returned no local plane corners.")
+                if not torch.is_tensor(local_corners):
+                    local_corners = tensorify(local_corners, dtype=self.config.dtype)
+                if local_corners.shape[-2:] != (4, 4):
+                    raise ValueError(
+                        f"object index {idx} returned plane corners with shape "
+                        f"{tuple(local_corners.shape)} instead of (4, 4)."
+                    )
+                if not torch.isfinite(local_corners).all():
+                    raise ValueError(
+                        f"object index {idx} returned non-finite local corners.")
+
+                global_corners = obj.local_to_global(
+                    local_corners, t=existing_times, v_include_time=False)
+                if not torch.isfinite(global_corners).all():
+                    raise ValueError(
+                        f"object index {idx} returned non-finite global corners.")
+
+                corner_xyz = global_corners[..., :3].detach()
+                center_for_corners = center.to(
+                    dtype=corner_xyz.dtype, device=corner_xyz.device)
+                corner_dists = (corner_xyz - center_for_corners).norm(dim=-1)
+                num_visible_plane_corner_samples += int(corner_dists.numel())
+                corner_dist_max = corner_dists.max()
+                if max_plane_corner_dist is None or corner_dist_max > max_plane_corner_dist:
+                    flat_idx = int(torch.argmax(corner_dists).detach().cpu().item())
+                    time_count = corner_dists.shape[-1]
+                    corner_idx = flat_idx // time_count
+                    time_idx = flat_idx % time_count
+                    max_plane_corner_dist = corner_dist_max
+                    max_plane_corner_source = {
+                        "object_index": idx,
+                        "corner_index": corner_idx,
+                        "frame_time": scalar(existing_times[time_idx]),
+                    }
+            except Exception as e:
+                if plane_corner_diagnostic_error is None:
+                    plane_corner_diagnostic_error = str(e)
+
+        if max_plane_center_dist is None or num_visible_plane_center_samples == 0:
+            raise ValueError(
+                "Visible plane-center sphere radius mode found no visible "
+                "foreground plane-center samples."
+            )
+
+        max_bbox_corner_dist = None
+        max_bbox_corner_source = None
+        bbox_corner_diagnostic_error = None
+        try:
+            if not hasattr(self, "boxes"):
+                self.boxes = self.load_boxes()
+            for obj_id, box in self.boxes.items():
+                mask_index = np.argwhere(self.dataset.mask_ids == obj_id)
+                if len(mask_index) == 0:
+                    continue
+                if len(mask_index) > 1:
+                    raise ValueError(
+                        f"Multiple masks with the same id {obj_id} found.")
+                missing_in_frame = masks[:, mask_index].sum(
+                    dim=(-2, -1)).squeeze() == 0
+                indices = index_of_first(box.frame_times, times)
+                missing_in_frame = missing_in_frame | (indices == -1)
+                existing_indices = indices[~missing_in_frame]
+                existing_times = times[~missing_in_frame]
+                if existing_indices.numel() == 0:
+                    continue
+
+                box_corners = tensorify(
+                    box.corners[existing_indices],
+                    dtype=center.dtype,
+                    device=center.device,
+                )
+                if box_corners.numel() == 0:
+                    continue
+                if not torch.isfinite(box_corners).all():
+                    raise ValueError(
+                        f"Non-finite bbox corners for object id {obj_id}.")
+                bbox_corner_dists = (box_corners - center[None, None, :]).norm(dim=-1)
+                dist_max = bbox_corner_dists.max()
+                if max_bbox_corner_dist is None or dist_max > max_bbox_corner_dist:
+                    flat_idx = int(torch.argmax(bbox_corner_dists).detach().cpu().item())
+                    corner_count = bbox_corner_dists.shape[-1]
+                    frame_idx = flat_idx // corner_count
+                    corner_idx = flat_idx % corner_count
+                    max_bbox_corner_dist = dist_max
+                    max_bbox_corner_source = {
+                        "object_id": obj_id,
+                        "corner_index": corner_idx,
+                        "frame_time": scalar(existing_times[frame_idx]),
+                    }
+        except Exception as e:
+            bbox_corner_diagnostic_error = str(e)
+
+        required_radius = torch.maximum(
+            max_plane_center_dist.to(dtype=max_cam_dist.dtype, device=max_cam_dist.device),
+            max_cam_dist,
+        )
+        epsilon_value = max(1e-4, 1e-6 * scalar(required_radius))
+        final_radius = required_radius + required_radius.new_tensor(epsilon_value)
+        corner_to_center_ratio = None
+        if max_plane_corner_dist is not None and scalar(max_plane_center_dist) > 0:
+            corner_to_center_ratio = scalar(max_plane_corner_dist) / scalar(max_plane_center_dist)
+
+        diagnostic_result = {
+            "mode_enabled": True,
+            "radius_source": "visible_plane_centers",
+            "center": [round(float(v), 4) for v in center.detach().cpu().tolist()],
+            "max_cam_dist": f"{scalar(max_cam_dist):.4f}",
+            "max_visible_plane_center_dist": f"{scalar(max_plane_center_dist):.4f}",
+            "max_visible_plane_center_source": max_plane_center_source,
+            "num_visible_plane_center_samples": num_visible_plane_center_samples,
+            "required_radius_before_epsilon": f"{scalar(required_radius):.4f}",
+            "epsilon": f"{epsilon_value:.8f}",
+            "final_radius": f"{scalar(final_radius):.4f}",
+            "max_visible_plane_corner_dist_diagnostic_only": (
+                None if max_plane_corner_dist is None else f"{scalar(max_plane_corner_dist):.4f}"
+            ),
+            "max_visible_plane_corner_source_diagnostic_only": max_plane_corner_source,
+            "num_visible_plane_corner_samples_diagnostic_only": num_visible_plane_corner_samples,
+            "plane_corner_to_center_ratio_diagnostic_only": (
+                None if corner_to_center_ratio is None else f"{corner_to_center_ratio:.4f}"
+            ),
+            "plane_corner_pathology_warning": (
+                corner_to_center_ratio is not None and corner_to_center_ratio > 5.0
+            ),
+            "plane_corner_diagnostic_error": plane_corner_diagnostic_error,
+            "max_visible_bbox_corner_dist_diagnostic_only": (
+                None if max_bbox_corner_dist is None else f"{scalar(max_bbox_corner_dist):.4f}"
+            ),
+            "max_visible_bbox_corner_source_diagnostic_only": max_bbox_corner_source,
+            "bbox_corner_diagnostic_error": bbox_corner_diagnostic_error,
+        }
+        self._write_visible_plane_center_sphere_radius_diagnostic(
+            diagnostic_result)
+        logger.info(
+            "Visible plane-center sphere radius: "
+            f"max_cam_dist={diagnostic_result['max_cam_dist']}, "
+            f"max_visible_plane_center_dist={diagnostic_result['max_visible_plane_center_dist']}, "
+            f"required_radius_before_epsilon={diagnostic_result['required_radius_before_epsilon']}, "
+            f"epsilon={diagnostic_result['epsilon']}, "
+            f"final_radius={diagnostic_result['final_radius']}, "
+            "plane_corner_dist_diagnostic_only="
+            f"{diagnostic_result['max_visible_plane_corner_dist_diagnostic_only']}, "
             "bbox_corner_dist_diagnostic_only="
             f"{diagnostic_result['max_visible_bbox_corner_dist_diagnostic_only']}"
         )
@@ -1120,20 +1368,39 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                     "background_sphere_radius_from_visible_plane_corners",
                     False,
                 )
-                if use_visible_plane_corner_sphere_radius and not getattr(
-                    background_plane_type, "is_spherical_background", False
+                use_visible_plane_center_sphere_radius = getattr(
+                    self.config,
+                    "background_sphere_radius_from_visible_plane_centers",
+                    False,
+                )
+                use_visible_geometry_sphere_radius = (
+                    use_visible_plane_corner_sphere_radius or
+                    use_visible_plane_center_sphere_radius
+                )
+                if (
+                    use_visible_plane_corner_sphere_radius and
+                    use_visible_plane_center_sphere_radius
                 ):
                     raise ValueError(
                         "--background-sphere-radius-from-visible-plane-corners "
+                        "cannot be combined with "
+                        "--background-sphere-radius-from-visible-plane-centers "
+                        "because both define the final spherical background radius."
+                    )
+                if use_visible_geometry_sphere_radius and not getattr(
+                    background_plane_type, "is_spherical_background", False
+                ):
+                    raise ValueError(
+                        "Visible plane geometry sphere radius mode "
                         "requires a spherical background type, but got "
                         f"{background_plane_type}."
                     )
                 if (
-                    use_visible_plane_corner_sphere_radius and
+                    use_visible_geometry_sphere_radius and
                     self.config.background_sphere_radius_override is not None
                 ):
                     raise ValueError(
-                        "--background-sphere-radius-from-visible-plane-corners "
+                        "Visible plane geometry sphere radius mode "
                         "cannot be combined with background_sphere_radius_override "
                         "because both define the final spherical background radius."
                     )
@@ -1154,6 +1421,15 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                         )
                     args["sphere_radius_override_source"] = \
                         "visible_plane_corners"
+                if use_visible_plane_center_sphere_radius:
+                    args["sphere_radius_override"] = \
+                        self._compute_visible_plane_center_sphere_radius(
+                            masks=masks,
+                            camera=camera,
+                            world=world,
+                        )
+                    args["sphere_radius_override_source"] = \
+                        "visible_plane_centers"
 
                 # Background for camera init should attach itself to the camera and for functional model the patching will happen before the init within the method aswell
                 background_plane = background_plane_type.for_camera(
