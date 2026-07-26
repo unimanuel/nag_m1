@@ -123,7 +123,7 @@ NAGConfig:
   normalize_camera: false
   num_batches: null
   num_objects: null
-  num_workers: 10
+  num_workers: 4
   object_position_spline_approximation: true
   object_rigid_control_points: null
   object_rigid_control_points_ratio: 1.0
