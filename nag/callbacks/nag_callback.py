@@ -1101,6 +1101,11 @@ class NAGCallback(pl.Callback):
                     "min": float(initial_rgb.min().detach().cpu().item()) if initial_rgb.numel() > 0 else None,
                     "max": float(initial_rgb.max().detach().cpu().item()) if initial_rgb.numel() > 0 else None,
                 }
+                visible_metadata_getter = getattr(
+                    background, "get_visible_uv_texture_metadata", None
+                )
+                if callable(visible_metadata_getter):
+                    metadata["visible_uv_texture"] = visible_metadata_getter()
                 with open(metadata_path, "w", encoding="utf-8") as f:
                     json.dump(metadata, f, indent=2)
             else:
