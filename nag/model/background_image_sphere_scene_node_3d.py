@@ -357,21 +357,22 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
         interior = torch.stack((interior_x.reshape(-1), interior_y.reshape(-1)), dim=-1)
         pixel_uv = torch.cat((top, bottom, left, right, interior), dim=0)
 
-        ray_origins, ray_directions = camera.get_global_rays(
-            uv=pixel_uv,
-            t=times,
-            uv_includes_time=False,
-        )
-        sphere_points, hit, _ = ray_sphere_intersection(
-            ray_origins,
-            ray_directions,
-            center,
-            radius,
-        )
-        local_directions = sphere_points - center
-        uv01 = direction_to_equirect_uv(local_directions, y_flip=y_flip)
-        valid = hit & torch.isfinite(uv01).all(dim=-1)
-        uv01 = uv01[valid]
+        with torch.no_grad():
+            ray_origins, ray_directions = camera.get_global_rays(
+                uv=pixel_uv,
+                t=times,
+                uv_includes_time=False,
+            )
+            sphere_points, hit, _ = ray_sphere_intersection(
+                ray_origins,
+                ray_directions,
+                center,
+                radius,
+            )
+            local_directions = sphere_points - center
+            uv01 = direction_to_equirect_uv(local_directions, y_flip=y_flip)
+            valid = hit & torch.isfinite(uv01).all(dim=-1)
+            uv01 = uv01[valid]
         if uv01.numel() == 0:
             return None, {"enabled": False, "reason": "no_valid_sphere_intersections"}, 0
 
