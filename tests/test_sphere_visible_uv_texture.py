@@ -72,3 +72,45 @@ def test_runtime_metric_counts_out_of_tile_lookups(node_class):
 
     assert context["visible_uv_texture_fallback_count"].item() == 1
     assert context["visible_uv_texture_lookup_count"].item() == 2
+
+
+def test_view_dependent_sphere_records_lookups_during_rgb_computation():
+    """The view-dependent override must not bypass the visible-UV metric."""
+    node = ViewDependentBackgroundImageSphereSceneNode3D.__new__(
+        ViewDependentBackgroundImageSphereSceneNode3D
+    )
+    torch.nn.Module.__init__(node)
+    node.flow_weight = 0.0
+    node.wrap_u = True
+    node.clamp_v = True
+    node.visible_uv_texture_enabled = True
+    node.register_buffer(
+        "visible_uv_texture_bounds",
+        torch.tensor([0.0, 0.5, 0.0, 1.0]),
+    )
+    node.dtype = torch.float32
+    node._index = 0
+    node.rgb_weight = 0.0
+    node.view_dependence_weight = 0.0
+    node.render_texture_map = False
+    node.get_rgb = lambda coords, sin_epoch: torch.zeros(
+        (*coords.shape[:-1], 3), dtype=coords.dtype, device=coords.device
+    )
+    node.get_initial_rgb = lambda coords: torch.zeros(
+        (*coords.shape[:-1], 3), dtype=coords.dtype, device=coords.device
+    )
+    node.get_view_dependence = lambda coords, **kwargs: torch.zeros(
+        (*coords.shape[:-1], 3), dtype=coords.dtype, device=coords.device
+    )
+
+    context = {}
+    node.compute_rgb_alpha(
+        uv=torch.tensor([[[-0.25, 0.0], [0.25, 0.0]]]),
+        t=torch.tensor([0.0, 1.0]),
+        sin_epoch=torch.tensor(1.0),
+        ray_directions=torch.tensor([[[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]]),
+        context=context,
+    )
+
+    assert context["visible_uv_texture_fallback_count"].item() == 1
+    assert context["visible_uv_texture_lookup_count"].item() == 2

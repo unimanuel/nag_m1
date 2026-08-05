@@ -277,6 +277,18 @@ class ViewDependentBackgroundImagePlaneSceneNode3D(
             if getattr(self, "clamp_v", False):
                 qy = qy.clamp(-0.5, 0.5)
             query_points = torch.stack([qx, qy], dim=-1)
+
+        # View-dependent backgrounds implement their own RGB path rather than
+        # delegating to BackgroundImagePlaneSceneNode3D.compute_rgb_alpha().
+        # Keep the optional visible-UV diagnostic here as well, otherwise
+        # view-dependent spheres use the local tile but never report when
+        # their learned flow reaches its fallback colour.
+        record_visible_uv_lookups = getattr(
+            self, "_record_visible_uv_texture_lookups", None
+        )
+        if record_visible_uv_lookups is not None:
+            record_visible_uv_lookups(query_points, context)
+
         # We need to collapse the time dimension and treat is as normal point, as the image plane should be "timeless"
         # And the flow as adjusted for the time already
         query_points = query_points.reshape(-1, 2)  # (B*T, 2)
