@@ -132,15 +132,8 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         if not self.visible_uv_texture_enabled:
             return super().get_initial_rgb(uv)
 
-        u_start, u_span, v_start, v_span = self.visible_uv_texture_bounds.unbind()
-        uv01 = uv + 0.5
-        local_u = torch.remainder(uv01[..., 0] - u_start, 1.0)
-        local_v = (uv01[..., 1] - v_start) / v_span.clamp_min(1e-8)
-        inside_u = (u_span >= 1.0 - 1e-6) | (local_u <= u_span)
-        inside_v = (local_v >= 0.0) & (local_v <= 1.0)
-        inside = inside_u & inside_v
+        inside, local_u, local_v = self._visible_uv_texture_coordinates(uv)
 
-        local_u = local_u / u_span.clamp_min(1e-8)
         local_grid = torch.stack([local_u, local_v], dim=-1)
         grid = (local_grid * 2.0 - 1.0)[None, None, ...]
         local_rgb = F.grid_sample(
@@ -154,6 +147,20 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
             dtype=local_rgb.dtype, device=local_rgb.device
         )
         return torch.where(inside[..., None], local_rgb, fallback_rgb)
+
+    def _visible_uv_texture_coordinates(
+        self, uv: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return BackgroundImageSphereSceneNode3D._visible_uv_texture_coordinates(
+            self, uv
+        )
+
+    def _record_visible_uv_texture_lookups(
+        self, uv: torch.Tensor, context: Optional[Dict[str, Any]]
+    ) -> None:
+        return BackgroundImageSphereSceneNode3D._record_visible_uv_texture_lookups(
+            self, uv, context
+        )
 
     @staticmethod
     def _compute_background_fallback_rgb(

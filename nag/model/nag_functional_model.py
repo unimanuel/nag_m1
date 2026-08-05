@@ -887,6 +887,32 @@ class NAGFunctionalModel(NAGModel):
 
         metrics = dict()
 
+        fallback_count = data.get("visible_uv_texture_fallback_count")
+        lookup_count = data.get("visible_uv_texture_lookup_count")
+        if fallback_count is not None and lookup_count is not None:
+            lookup_count = lookup_count.to(dtype=torch.float32)
+            fallback_count = fallback_count.to(dtype=torch.float32)
+            metrics["background/fallback_uv_fraction"] = (
+                fallback_count / lookup_count.clamp_min(1.0)
+            ).detach().cpu()
+            # Keep raw counts in the experiment log as epoch sums. They make
+            # the fraction auditable and allow an exact weighted fraction to
+            # be computed across batches after training.
+            self.log(
+                "background/fallback_uv_count",
+                fallback_count.detach().cpu(),
+                on_step=False,
+                on_epoch=True,
+                reduce_fx="sum",
+            )
+            self.log(
+                "background/uv_lookup_count",
+                lookup_count.detach().cpu(),
+                on_step=False,
+                on_epoch=True,
+                reduce_fx="sum",
+            )
+
         data["uv"] = uv
         data["t"] = t
 

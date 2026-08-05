@@ -46,3 +46,29 @@ def test_local_texture_lookup_uses_fallback_outside_tile(node_class):
 
     assert torch.allclose(values[0], torch.ones(3))
     assert torch.allclose(values[1], torch.tensor([0.0, 0.0, 1.0]))
+
+
+@pytest.mark.parametrize(
+    "node_class",
+    [
+        BackgroundImageSphereSceneNode3D,
+        ViewDependentBackgroundImageSphereSceneNode3D,
+    ],
+)
+def test_runtime_metric_counts_out_of_tile_lookups(node_class):
+    node = node_class.__new__(node_class)
+    torch.nn.Module.__init__(node)
+    node.register_buffer(
+        "visible_uv_texture_bounds",
+        torch.tensor([0.0, 0.5, 0.0, 1.0]),
+    )
+    node.visible_uv_texture_enabled = True
+
+    context = {}
+    node._record_visible_uv_texture_lookups(
+        torch.tensor([[[-0.25, 0.0], [0.25, 0.0]]]),
+        context,
+    )
+
+    assert context["visible_uv_texture_fallback_count"].item() == 1
+    assert context["visible_uv_texture_lookup_count"].item() == 2
