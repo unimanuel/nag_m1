@@ -4,6 +4,9 @@ import pytest
 from nag.model.background_image_sphere_scene_node_3d import (
     BackgroundImageSphereSceneNode3D,
 )
+from nag.model.view_dependent_background_image_sphere_scene_node_3d import (
+    ViewDependentBackgroundImageSphereSceneNode3D,
+)
 
 
 def test_circular_uv_interval_prefers_seam_crossing_interval():
@@ -15,10 +18,15 @@ def test_circular_uv_interval_prefers_seam_crossing_interval():
     assert span == pytest.approx(0.04, abs=1e-6)
 
 
-def test_local_texture_lookup_uses_fallback_outside_tile():
-    node = BackgroundImageSphereSceneNode3D.__new__(
-        BackgroundImageSphereSceneNode3D
-    )
+@pytest.mark.parametrize(
+    "node_class",
+    [
+        BackgroundImageSphereSceneNode3D,
+        ViewDependentBackgroundImageSphereSceneNode3D,
+    ],
+)
+def test_local_texture_lookup_uses_fallback_outside_tile(node_class):
+    node = node_class.__new__(node_class)
     torch.nn.Module.__init__(node)
     node.register_buffer("initial_rgb", torch.ones(3, 4, 4))
     node.register_buffer(

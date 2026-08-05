@@ -19,6 +19,7 @@ normal varies per query point, so we:
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 
 from nag.model.timed_camera_scene_node_3d import TimedCameraSceneNode3D
 from nag.model.timed_discrete_scene_node_3d import global_to_local
@@ -46,6 +47,9 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         num_flow_control_points: int,
         sphere_radius: Union[float, torch.Tensor] = 1.0,
         sphere_uv_y_flip: bool = False,
+        visible_uv_texture_bounds: Optional[VEC_TYPE] = None,
+        visible_uv_texture_fallback_rgb: Optional[VEC_TYPE] = None,
+        visible_uv_texture_metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__(num_flow_control_points=num_flow_control_points, **kwargs)
@@ -59,8 +63,116 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
         self.wrap_u = True
         self.clamp_v = True
 
+        # The view-dependent sphere inherits its RGB/network implementation
+        # from the planar view-dependent node, so it cannot inherit the
+        # visible-UV state initialization from BackgroundImageSphereSceneNode3D.
+        # Keep the same state and validation here so the shared for_camera()
+        # constructor works for both spherical node variants.
+        if visible_uv_texture_bounds is not None:
+            visible_bounds = tensorify(
+                visible_uv_texture_bounds,
+                dtype=self.dtype,
+                device=self._translation.device,
+            ).reshape(-1)
+            if visible_bounds.numel() != 4:
+                raise ValueError(
+                    "visible_uv_texture_bounds must contain "
+                    "[u_start, u_span, v_start, v_span]."
+                )
+            if not torch.isfinite(visible_bounds).all():
+                raise ValueError("visible_uv_texture_bounds must be finite.")
+            if visible_bounds[1] <= 0 or visible_bounds[1] > 1:
+                raise ValueError("visible UV u_span must be in (0, 1].")
+            if visible_bounds[3] <= 0 or visible_bounds[3] > 1:
+                raise ValueError("visible UV v_span must be in (0, 1].")
+        else:
+            visible_bounds = torch.zeros(
+                4, dtype=self.dtype, device=self._translation.device
+            )
+
+        self.register_buffer("visible_uv_texture_bounds", visible_bounds)
+        self.visible_uv_texture_enabled = visible_uv_texture_bounds is not None
+
+        if visible_uv_texture_fallback_rgb is None:
+            fallback_rgb = torch.zeros(
+                3, dtype=self.dtype, device=self._translation.device
+            )
+        else:
+            fallback_rgb = tensorify(
+                visible_uv_texture_fallback_rgb,
+                dtype=self.dtype,
+                device=self._translation.device,
+            ).reshape(-1)
+            if fallback_rgb.numel() != 3:
+                raise ValueError("visible_uv_texture_fallback_rgb must contain RGB values.")
+        self.register_buffer("visible_uv_texture_fallback_rgb", fallback_rgb.clamp(0, 1))
+        self.visible_uv_texture_metadata = dict(visible_uv_texture_metadata or {})
+
     def get_sphere_radius(self) -> torch.Tensor:
         return self.sphere_radius
+
+    def get_visible_uv_texture_metadata(self) -> Dict[str, Any]:
+        """Return JSON-serializable diagnostics for the optional local texture."""
+        metadata = dict(self.visible_uv_texture_metadata)
+        metadata["enabled"] = bool(self.visible_uv_texture_enabled)
+        metadata["fallback_rgb"] = [
+            float(value)
+            for value in self.visible_uv_texture_fallback_rgb.detach().cpu().tolist()
+        ]
+        if self.visible_uv_texture_enabled:
+            bounds = self.visible_uv_texture_bounds.detach().cpu().tolist()
+            metadata["u_start"] = float(bounds[0])
+            metadata["u_span"] = float(bounds[1])
+            metadata["v_start"] = float(bounds[2])
+            metadata["v_span"] = float(bounds[3])
+        return metadata
+
+    def get_initial_rgb(self, uv: torch.Tensor) -> torch.Tensor:
+        """Sample the visible local tile, with a prior outside its bounds."""
+        if not self.visible_uv_texture_enabled:
+            return super().get_initial_rgb(uv)
+
+        u_start, u_span, v_start, v_span = self.visible_uv_texture_bounds.unbind()
+        uv01 = uv + 0.5
+        local_u = torch.remainder(uv01[..., 0] - u_start, 1.0)
+        local_v = (uv01[..., 1] - v_start) / v_span.clamp_min(1e-8)
+        inside_u = (u_span >= 1.0 - 1e-6) | (local_u <= u_span)
+        inside_v = (local_v >= 0.0) & (local_v <= 1.0)
+        inside = inside_u & inside_v
+
+        local_u = local_u / u_span.clamp_min(1e-8)
+        local_grid = torch.stack([local_u, local_v], dim=-1)
+        grid = (local_grid * 2.0 - 1.0)[None, None, ...]
+        local_rgb = F.grid_sample(
+            self.initial_rgb.unsqueeze(0),
+            grid,
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=self.align_corners,
+        )[0].reshape(3, -1).permute(1, 0).reshape(*uv.shape[:-1], 3)
+        fallback_rgb = self.visible_uv_texture_fallback_rgb.to(
+            dtype=local_rgb.dtype, device=local_rgb.device
+        )
+        return torch.where(inside[..., None], local_rgb, fallback_rgb)
+
+    @staticmethod
+    def _compute_background_fallback_rgb(
+        images: torch.Tensor,
+        masks: torch.Tensor,
+    ) -> torch.Tensor:
+        return BackgroundImageSphereSceneNode3D._compute_background_fallback_rgb(
+            images, masks
+        )
+
+    @staticmethod
+    def _compute_circular_uv_interval(u_values: torch.Tensor) -> Tuple[float, float]:
+        return BackgroundImageSphereSceneNode3D._compute_circular_uv_interval(u_values)
+
+    @classmethod
+    def _compute_visible_uv_texture_layout(cls, *args, **kwargs):
+        return BackgroundImageSphereSceneNode3D._compute_visible_uv_texture_layout.__func__(
+            cls, *args, **kwargs
+        )
 
     def _get_native_flow(
         self,
