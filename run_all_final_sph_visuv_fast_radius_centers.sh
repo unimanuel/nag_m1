@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Faster static-camera visible-UV runs, ordered from the smallest estimated
-# workload to the larger known-fast slices. The dedicated W975 175-195 pilot
-# is intentionally omitted; run it first with the command documented below.
+# Static-camera visible-UV runs, ordered from the smallest estimated workload
+# to the larger known-fast slices. This matches the six sequences in the
+# regular- and double-resolution baseline runner scripts.
+
+echo
+echo "Running visible-UV config: W975 175-195"
+python nag/scripts/run_nag.py \
+  --config-path config/waymo/final/segment-9758342966297863572_175_195_large-undistorted_sph_visuv.yaml \
+  --background-sphere-radius-from-visible-plane-centers \
+  --name W975_175_195_large-undistorted_sph_visuv_radius_visible_plane_centers
 
 echo
 echo "Running fast visible-UV config: W125 124-149"
