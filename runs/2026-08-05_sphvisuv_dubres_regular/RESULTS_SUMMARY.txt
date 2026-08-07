@@ -1,0 +1,184 @@
+SPHERICAL BACKGROUND RESOLUTION EXPERIMENT - RESULTS SO FAR
+============================================================
+
+Date written: 2026-08-07
+Result folder: C:\Coding\CGProject\nag1\runs\2026-08-05_sphvisuv_dubres_regular
+
+
+1. PURPOSE
+----------
+
+Test whether allocating the normal sphere-texture budget only to the UV area
+seen by the cameras ("visible-UV") can improve spherical-background quality
+without the memory cost of a globally double-resolution sphere texture.
+
+All experiments use static Waymo final scenes, a view-dependent spherical
+background, and the sphere radius computed from visible plane centers.
+
+
+2. VARIANTS
+-----------
+
+Regular sphere
+  - color_mask_resolution: 960 x 1920
+  - Standard full-sphere texture mapping.
+
+Double-resolution sphere ("dubres")
+  - color_mask_resolution: 1920 x 3840
+  - Standard full-sphere texture mapping.
+
+Visible-UV sphere
+  - color_mask_resolution: 960 x 1920 (the normal-resolution texel budget).
+  - The whole budget is packed into a UV tile covering the camera-visible
+    portion of the sphere.
+  - margin_uv: [0.05, 0.05]
+  - interior_samples_per_axis: 9
+  - Outside the tile, the background uses a fallback colour.
+
+Visible-UV run 1 is the initial run set. Visible-UV run 2 repeats exactly the
+same six visible-UV configurations after fallback-lookup instrumentation was
+fixed and committed.
+
+
+3. UV TILE DENSITY AND FALLBACK SAFETY
+--------------------------------------
+
+Visible-UV tile coverage/density:
+  W975 175-195: 22.02% of sphere UV area,  4.54x local texel density
+  W125 124-149:  6.98% of sphere UV area, 14.34x local texel density
+  W141 174-197:  7.25% of sphere UV area, 13.80x local texel density
+  W203   3-58 :  7.05% of sphere UV area, 14.19x local texel density
+  W344  95-135:  7.17% of sphere UV area, 13.94x local texel density
+  W324 161-197:  7.20% of sphere UV area, 13.89x local texel density
+
+Visible-UV run 2 logged the actual texture lookup coordinates after learned
+flow and sphere UV wrapping/clamping. Results:
+
+  fallback_uv_fraction: 0 for every training step and every epoch
+  fallback_uv_count:    0 for every training epoch
+  Total observed training-time background RGB lookups: 3.852 billion
+
+Therefore, learned flow did not leave the local tile in any of these six
+static-scene training runs. The current 0.05 UV margin is sufficient for these
+data and camera trajectories. This is evidence for training-time lookups; it
+does not automatically prove the same margin is safe for entirely new camera
+trajectories or a different scene.
+
+
+4. FINAL OVERALL MEAN PSNR BY SCENE
+-----------------------------------
+
+The values below are the final entries in tracker/train_epoch_MeanMPSNR.csv.
+Higher is better. "Visible average" is the arithmetic average of the two
+visible-UV runs, not a separately trained model.
+
+Scene             Regular     Dubres      Visible 1   Visible 2   Visible average
+W975 175-195      30.6072     30.6514     30.5687     30.5943     30.5815
+W125 124-149      35.0084     35.0754     35.1166     35.1269     35.1218
+W141 174-197      35.2884     35.2774     35.2858     35.2638     35.2748
+W203   3-58       34.9356     34.9026     34.9441     34.9519     34.9480
+W344  95-135      31.9920     31.9997     32.0324     31.9837     32.0081
+W324 161-197      32.8489     32.8263     32.8300     32.7946     32.8123
+
+
+5. SIMPLE AVERAGE ACROSS THE SIX SCENES
+----------------------------------------
+
+These are unweighted averages of the six per-scene final metrics. They are
+useful summaries, but are not a substitute for repeat/seed statistics.
+Higher MeanMPSNR and MeanSSIM are better; lower MeanLPIPS is better.
+
+Variant                MeanMPSNR    MeanSSIM    MeanLPIPS
+Regular sphere          33.44675     0.930109    0.212888
+Double resolution       33.45547     0.930362    0.212088
+Visible-UV run 1        33.46293     0.930509    0.210907
+Visible-UV run 2        33.45255     0.930408    0.211294
+Visible-UV average      33.45774     0.930458    0.211101
+
+Visible-UV average relative to regular sphere:
+  MeanMPSNR: +0.01099 dB
+  MeanSSIM:  +0.000349
+  MeanLPIPS: -0.001787
+
+Visible-UV average relative to double resolution:
+  MeanMPSNR: +0.00227 dB
+  MeanSSIM:  +0.000096
+  MeanLPIPS: -0.000987
+
+
+6. INTERPRETATION OF QUALITY RESULTS
+------------------------------------
+
+Visible-UV is technically successful: it concentrates 4.5x to 14.3x more
+texel density on the used sphere region, never used fallback colour during
+training, and has no visible seam/artifact in inspected renders.
+
+The average visible-UV metrics are slightly better than both baselines.
+However, the improvement is too small to call conclusive because training is
+not deterministic. The two otherwise identical visible-UV runs differ by up
+to 0.0487 dB MeanMPSNR on an individual scene. That repeat-to-repeat variation
+is larger than most visible-UV versus baseline differences.
+
+Accordingly:
+  - Visible-UV is at least competitive with global double resolution while
+    retaining the normal-resolution texture budget.
+  - The present runs do NOT yet prove a reliable, visually material quality
+    improvement over regular or double-resolution sphere textures.
+  - The initial apparent advantage over double resolution should be treated as
+    promising, not established, until controlled seed repeats are available.
+
+The final eval_epoch Vehicle/Human metrics are semantic object-group metrics,
+not background-only metrics. In visible-UV run 2, regular sphere has higher
+Vehicle MPSNR/SSIM in five of six scenes. This is an important caution against
+claiming a broad general-quality win from the current data.
+
+
+7. RUNTIME
+----------
+
+Each total covers the same six scenes.
+
+Regular sphere:        2h 58m 16s
+Double resolution:     2h 56m 44s
+Visible-UV run 1:      2h 56m 33s
+Visible-UV run 2:      2h 57m 54s
+
+The fallback instrumentation increased the visible-UV batch by only 1m 21s
+(less than 1%) relative to visible-UV run 1. In this experiment, runtime does
+not distinguish the three variants.
+
+
+8. RECOMMENDED NEXT EXPERIMENT
+------------------------------
+
+For a statistically useful decision:
+
+  1. Select two representative scenes (for example W125 and W324).
+  2. Run regular, double-resolution, and visible-UV variants with 2-3 fixed
+     seeds each.
+  3. Compare mean and spread for MeanMPSNR, MeanSSIM, MeanLPIPS, and relevant
+     final eval_epoch metrics.
+  4. Add a background-specific metric or stable image crops (sky, building,
+     road) if the primary question is background detail; current Vehicle/Human
+     metrics are indirect measures of background quality.
+
+The current configs have deterministic: false, so single runs cannot reliably
+resolve effects on the order of approximately 0.01 to 0.05 dB.
+
+
+9. WHERE TO FIND THE RAW VALUES
+-------------------------------
+
+For each run:
+  - Overall training metrics:
+      tracker/train_epoch_MeanMPSNR.csv
+      tracker/train_epoch_MeanSSIM.csv
+      tracker/train_epoch_MeanLPIPS.csv
+  - Semantic evaluation metrics:
+      tracker/eval_epoch_MPSNR_*.csv
+      tracker/eval_epoch_SSIM_*.csv
+  - Visible-UV layout:
+      initial/background_texture/initial_rgb_metadata.json
+  - Visible-UV fallback metrics (visible-UV run 2 only):
+      wandb/offline-run-*/run-*.wandb
+
