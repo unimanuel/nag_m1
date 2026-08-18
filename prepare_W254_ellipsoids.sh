@@ -54,7 +54,8 @@ echo "[3/3] Fitting FRONT-visible ellipsoids for all four W254 intervals"
   --point-cloud-dir "$pointcloud_dir" \
   --nag-data-dir "$repo_root/data/datasets/waymo" \
   --target-dir "$ellipsoid_dir" \
-  --segment-ids "$segment_id"
+  --segment-ids "$segment_id" \
+  --correct-pose-mismatches
 
 echo
 echo "Prepared W254 ellipsoids:"
