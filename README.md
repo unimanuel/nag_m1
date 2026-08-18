@@ -108,6 +108,9 @@ Given a proper python environment setup, one can run our method using:
 python nag/scripts/run_nag.py --config-path [path-to-config]
 ```
 
+Waymo PCA ellipsoid backgrounds and the scene-115 training commands are
+documented in [docs/ellipsoid_background.md](docs/ellipsoid_background.md).
+
 For more details, please refer to the [training instructions](docs/training.md).
 
 During the training process and afterwards, the model is evaluated to produce outputs for all frames, calculating metrics, as well as scene decompositions for every object.
@@ -162,4 +165,3 @@ If you find our work useful in your research, please consider citing our paper:
 ```
 
 Thanks for your interest in our work! We hope you find Neural Atlas Graphs as exciting and useful as we do. If you have any questions, suggestions, or feedback, please don't hesitate to reach out via GitHub issues or discussions.
-
