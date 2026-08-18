@@ -2,3 +2,7 @@
 	path = tools
 	url = https://github.com/unimanuel/tools_m1
 	branch = nag
+[submodule "libs/nag-waymo-processing"]
+	path = libs/nag-waymo-processing
+	url = https://github.com/jp-schneider/nag-waymo-processing.git
+	branch = main
