@@ -41,6 +41,7 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
     """View-dependent spherical background."""
 
     is_spherical_background: bool = True
+    is_curved_background: bool = True
 
     def __init__(
         self,
@@ -110,6 +111,30 @@ class ViewDependentBackgroundImageSphereSceneNode3D(
 
     def get_sphere_radius(self) -> torch.Tensor:
         return self.sphere_radius
+
+    def intersect_rays(
+        self,
+        ray_origins: torch.Tensor,
+        ray_directions: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return BackgroundImageSphereSceneNode3D.intersect_rays(
+            self,
+            ray_origins,
+            ray_directions,
+            global_position,
+        )
+
+    def get_global_surface_normals(
+        self,
+        points_global: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> torch.Tensor:
+        return BackgroundImageSphereSceneNode3D.get_global_surface_normals(
+            self,
+            points_global,
+            global_position,
+        )
 
     def get_visible_uv_texture_metadata(self) -> Dict[str, Any]:
         """Return JSON-serializable diagnostics for the optional local texture."""

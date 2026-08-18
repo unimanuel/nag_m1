@@ -61,6 +61,9 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
 
     # Used by the models to detect that this background should be intersected as a sphere.
     is_spherical_background: bool = True
+    # Curved backgrounds provide their own ray intersection, surface normal,
+    # UV mapping, and flowed-surface reconstruction instead of using plane UVs.
+    is_curved_background: bool = True
 
     def __init__(
         self,
@@ -126,6 +129,28 @@ class BackgroundImageSphereSceneNode3D(BackgroundImagePlaneSceneNode3D):
 
     def get_sphere_radius(self) -> torch.Tensor:
         return self.sphere_radius
+
+    def intersect_rays(
+        self,
+        ray_origins: torch.Tensor,
+        ray_directions: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        center = global_position[..., :3, 3]
+        return ray_sphere_intersection(
+            ray_origins=ray_origins,
+            ray_directions=ray_directions,
+            center=center,
+            radius=self.get_sphere_radius(),
+        )
+
+    def get_global_surface_normals(
+        self,
+        points_global: torch.Tensor,
+        global_position: torch.Tensor,
+    ) -> torch.Tensor:
+        center = global_position[..., :3, 3]
+        return normalize(points_global - center)
 
     def get_visible_uv_texture_metadata(self) -> Dict[str, Any]:
         """Return JSON-serializable diagnostics for the optional local texture."""

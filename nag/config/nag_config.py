@@ -338,6 +338,14 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     background_sphere_radius_override: Optional[float] = field(default=None)
     """Optional final radius override for spherical backgrounds. If set, it can be used from the CLI to test a fixed sphere radius without changing YAML files."""
 
+    background_ellipsoid_path: Optional[Union[str, os.PathLike, Path]] = field(default=None)
+    """Path to a format-version-1 ``ellipsoid.json`` produced by ``nagwp ellipsoid``.
+    Required when ``background_plane_type`` selects an ellipsoidal background."""
+
+    background_ellipsoid_scale_margin: float = field(default=0.02)
+    """Uniform fractional expansion applied to all fitted ellipsoid radii at load time.
+    This keeps cameras and fitted LiDAR points safely inside the rendering surface."""
+
     is_background_color_learnable: bool = field(default=True)
     """If the background color should be learnable."""
 
@@ -639,6 +647,15 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
 
         self.boxes_object_id_mask_mapping_path = process_path(self.boxes_object_id_mask_mapping_path, need_exist=False, allow_none=True,
                                                               interpolate=True, interpolate_object=self, variable_name="boxes_object_id_mask_mapping_path")
+
+        self.background_ellipsoid_path = process_path(
+            self.background_ellipsoid_path,
+            need_exist=True,
+            allow_none=True,
+            interpolate=True,
+            interpolate_object=self,
+            variable_name="background_ellipsoid_path",
+        )
 
         if isinstance(self.dtype, str):
             self.dtype = torch.dtype(self.dtype)

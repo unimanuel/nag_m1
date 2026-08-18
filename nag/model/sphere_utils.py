@@ -169,3 +169,54 @@ def ray_sphere_intersection(
 
     points = o + t.unsqueeze(-1) * d
     return points, hit, t
+
+
+def ray_ellipsoid_intersection(
+    ray_origins: torch.Tensor,
+    ray_directions: torch.Tensor,
+    center: torch.Tensor,
+    radii: torch.Tensor,
+    rotation: torch.Tensor,
+    eps: float = 1e-8,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Intersect rays with an oriented ellipsoid.
+
+    ``rotation`` contains the ellipsoid's local axes in its columns, mapping
+    local coordinates into the same world frame as the rays. The calculation
+    transforms rays into the corresponding unit-sphere coordinates, solves the
+    quadratic there, and reports distance along a normalized world-space ray.
+    Rays originating inside the ellipsoid select the exiting intersection;
+    rays outside select the nearest positive intersection.
+    """
+
+    d = normalize(ray_directions, eps=eps)
+    radii = radii.to(dtype=d.dtype, device=d.device)
+    rotation = rotation.to(dtype=d.dtype, device=d.device)
+    center = center.to(dtype=d.dtype, device=d.device)
+
+    # Row-vector form of R^T @ (p - center), where R's columns are the
+    # ellipsoid axes in world coordinates. torch.matmul preserves/broadcasts
+    # arbitrary batch and time dimensions.
+    origin_local = torch.matmul(
+        (ray_origins - center).unsqueeze(-2), rotation
+    ).squeeze(-2)
+    direction_local = torch.matmul(d.unsqueeze(-2), rotation).squeeze(-2)
+    scaled_origin = origin_local / radii
+    scaled_direction = direction_local / radii
+
+    quadratic_a = (scaled_direction * scaled_direction).sum(dim=-1)
+    quadratic_b = 2.0 * (scaled_origin * scaled_direction).sum(dim=-1)
+    quadratic_c = (scaled_origin * scaled_origin).sum(dim=-1) - 1.0
+    discriminant = quadratic_b * quadratic_b - 4.0 * quadratic_a * quadratic_c
+    has_real_roots = discriminant >= 0.0
+    sqrt_discriminant = torch.sqrt(torch.clamp(discriminant, min=0.0))
+    denominator = (2.0 * quadratic_a).clamp_min(eps)
+    t_near = (-quadratic_b - sqrt_discriminant) / denominator
+    t_far = (-quadratic_b + sqrt_discriminant) / denominator
+
+    near_positive = t_near > eps
+    far_positive = t_far > eps
+    t = torch.where(near_positive, t_near, t_far)
+    hit = has_real_roots & (near_positive | far_positive) & (quadratic_a > eps)
+    points = ray_origins + t.unsqueeze(-1) * d
+    return points, hit, t

@@ -27,9 +27,6 @@ from tools.util.torch import index_of_first
 
 from nag.sampling.regular_uv_grid_sampler import RegularUVGridSampler
 
-from nag.model.sphere_utils import ray_sphere_intersection, normalize
-
-
 @torch.jit.script
 def get_object_intersection_points(
     global_plane_positions: torch.Tensor,
@@ -217,19 +214,14 @@ def get_object_information(
         global_plane_positions, local_plane_scale, local_plane_scale_offset, global_ray_origins, global_ray_directions)
 
     # ------------------------------------------------------------------
-    # Spherical background override (non-functional NAGModel path)
+    # Curved background override (non-functional NAGModel path)
     # ------------------------------------------------------------------
     for i, obj in enumerate(objects):
-        if getattr(obj, "is_spherical_background", False):
-            center_T = global_plane_positions[i, :, :3, 3]  # (T,3)
-            center_BT = center_T.unsqueeze(0)               # (1,T,3)
-            radius = obj.get_sphere_radius() if hasattr(obj, "get_sphere_radius") else getattr(obj, "sphere_radius")
-            radius = tensorify(radius, dtype=global_ray_origins.dtype, device=global_ray_origins.device)
-            pts_BT, hit_BT, _ = ray_sphere_intersection(
+        if getattr(obj, "is_curved_background", False):
+            pts_BT, hit_BT, _ = obj.intersect_rays(
                 ray_origins=global_ray_origins,
                 ray_directions=global_ray_directions,
-                center=center_BT.to(global_ray_origins.dtype),
-                radius=radius,
+                global_position=global_plane_positions[i],
             )
             # Rebuild the stacks instead of mutating a slice so this legacy path
             # matches the autograd-safe behavior of the functional model.

@@ -33,7 +33,6 @@ from tools.context.temporary_training import TemporaryTraining
 from tools.util.typing import VEC_TYPE, NUMERICAL_TYPE, DEFAULT, _DEFAULT
 from tools.util.torch import batched_generator_exec, flatten_batch_dims, unflatten_batch_dims
 from nag.model.learned_aberration_plane_scene_node_3d import LearnedAberrationPlaneSceneNode3D
-from nag.model.sphere_utils import ray_sphere_intersection, normalize
 from tools.util.sized_generator import SizedGenerator
 from tools.transforms.geometric.quaternion import quat_subtraction
 from tools.util.torch import TensorUtil
@@ -725,32 +724,27 @@ class NAGFunctionalModel(NAGModel):
         )
 
         # ------------------------------------------------------------------
-        # Spherical background override
+        # Curved background override
         # ------------------------------------------------------------------
         # Intersection is computed as ray-plane for all nodes in the JIT path.
-        # If the configured background is spherical, overwrite the background
-        # entry with an actual ray-sphere intersection (camera and objects are
-        # expected to be inside the sphere).
+        # Curved backgrounds overwrite the plane hit with their own analytic
+        # surface intersection. Cameras are expected to be inside the surface.
         # NOTE: `self.background_idx` is the index in the *full* `self.objects` list.
         # In this forward we build a *filtered* `objects` list based on
         # `enabled_objects`, which shifts indices. So we must locate the
         # background within the filtered list.
         bg_i = next((i for i, o in enumerate(objects)
-                     if getattr(o, "is_spherical_background", False)), None)
+                     if getattr(o, "is_curved_background", False)), None)
         if has_background and bg_i is not None:
             bg_T = global_positions[OB_mask][bg_i]  # (T,4,4)
             center_T = bg_T[:, :3, 3]  # (T,3)
             center_BT = center_T.unsqueeze(0)  # (1,T,3) broadcast over B
 
             bg_obj = objects[bg_i]
-            radius = bg_obj.get_sphere_radius() if hasattr(bg_obj, "get_sphere_radius") else getattr(bg_obj, "sphere_radius")
-            radius = tensorify(radius, dtype=uv.dtype, device=uv.device)
-
-            pts_BT, hit_BT, _t_BT = ray_sphere_intersection(
+            pts_BT, hit_BT, _t_BT = bg_obj.intersect_rays(
                 ray_origins=global_ray_origins,
                 ray_directions=global_ray_directions,
-                center=center_BT.to(uv.dtype),
-                radius=radius,
+                global_position=bg_T,
             )
 
             # Rebuild the object stacks instead of assigning into a slice so the
@@ -767,7 +761,7 @@ class NAGFunctionalModel(NAGModel):
             # Provide per-ray reference points/normals for gradient hooks.
             if plane_p is not None and plane_n is not None:
                 bg_plane_p = center_BT.expand_as(pts_BT)
-                bg_plane_n = normalize(pts_BT - bg_plane_p)
+                bg_plane_n = bg_obj.get_global_surface_normals(pts_BT, bg_T)
                 # These hook inputs participate in backward too, so avoid
                 # slice assignment for the same reason as above.
                 plane_p = torch.stack(
@@ -1385,20 +1379,15 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale_offset=local_plane_scale_offset,
         )
 
-        # Spherical background override (object_specific_forward)
-        bg_i = next((i for i, o in enumerate(objects) if getattr(o, "is_spherical_background", False)), None)
+        # Curved background override (object_specific_forward)
+        bg_i = next((i for i, o in enumerate(objects) if getattr(o, "is_curved_background", False)), None)
         if bg_i is not None:
             bg_T = global_positions[OB_mask][bg_i]
-            center_T = bg_T[:, :3, 3]
-            center_BT = center_T.unsqueeze(0)
             bg_obj = objects[bg_i]
-            radius = bg_obj.get_sphere_radius() if hasattr(bg_obj, "get_sphere_radius") else getattr(bg_obj, "sphere_radius")
-            radius = tensorify(radius, dtype=uv.dtype, device=uv.device)
-            pts_BT, hit_BT, _ = ray_sphere_intersection(
+            pts_BT, hit_BT, _ = bg_obj.intersect_rays(
                 ray_origins=global_ray_origins,
                 ray_directions=global_ray_directions,
-                center=center_BT.to(uv.dtype),
-                radius=radius,
+                global_position=bg_T,
             )
             # Rebuild the stacks instead of mutating a view so object-specific
             # rendering stays autograd-safe with spherical backgrounds.
@@ -1444,10 +1433,10 @@ class NAGFunctionalModel(NAGModel):
             ray_local_origin = global_to_local(
                 global_plane_positions[i], global_ray_origins, v_include_time=True)[..., :3]
             ray_local_directions = ray_local_target - ray_local_origin
-            # Spherical backgrounds need their true 3D hit points and global
+            # Curved backgrounds need their true 3D hit points and global
             # rays so they can rebuild equirectangular UVs and tangent-frame
             # view directions. Planar objects still consume plane-space UVs.
-            if getattr(obj, "is_spherical_background", False):
+            if getattr(obj, "is_curved_background", False):
                 query_points = intersection_points[i]
                 query_ray_origins = global_ray_origins
                 query_ray_directions = global_ray_directions
@@ -1540,20 +1529,15 @@ class NAGFunctionalModel(NAGModel):
             local_plane_scale_offset=local_plane_scale_offset,
         )
 
-        # Spherical background override (modality_forward)
-        bg_i = next((i for i, o in enumerate(objects) if getattr(o, "is_spherical_background", False)), None)
+        # Curved background override (modality_forward)
+        bg_i = next((i for i, o in enumerate(objects) if getattr(o, "is_curved_background", False)), None)
         if bg_i is not None:
             bg_T = global_positions[OB_mask][bg_i]
-            center_T = bg_T[:, :3, 3]
-            center_BT = center_T.unsqueeze(0)
             bg_obj = objects[bg_i]
-            radius = bg_obj.get_sphere_radius() if hasattr(bg_obj, "get_sphere_radius") else getattr(bg_obj, "sphere_radius")
-            radius = tensorify(radius, dtype=uv.dtype, device=uv.device)
-            pts_BT, hit_BT, _ = ray_sphere_intersection(
+            pts_BT, hit_BT, _ = bg_obj.intersect_rays(
                 ray_origins=global_ray_origins,
                 ray_directions=global_ray_directions,
-                center=center_BT.to(uv.dtype),
-                radius=radius,
+                global_position=bg_T,
             )
             # Rebuild the stacks instead of mutating a view so modality queries
             # reuse the same autograd-safe override as training forward.
@@ -1586,8 +1570,8 @@ class NAGFunctionalModel(NAGModel):
             OB, B * T, -1).permute(1, 0, 2), local_plane_scale, local_plane_scale_offset).permute(1, 0, 2).reshape(OB, B, T, -1)
 
         ray_global_target = global_ray_origins + global_ray_directions
-        spherical_object_mask = torch.tensor(
-            [getattr(obj, "is_spherical_background", False) for obj in objects],
+        curved_object_mask = torch.tensor(
+            [getattr(obj, "is_curved_background", False) for obj in objects],
             device=uv.device,
             dtype=torch.bool,
         )
@@ -1600,10 +1584,10 @@ class NAGFunctionalModel(NAGModel):
             ray_local_origin = global_to_local(
                 global_plane_positions[i], global_ray_origins, v_include_time=True)[..., :3]
             ray_local_directions = ray_local_target - ray_local_origin
-            # The spherical background cannot reuse plane UVs in the modality
-            # pass; it needs the global sphere hits and global rays to recover
+            # A curved background cannot reuse plane UVs in the modality
+            # pass; it needs global surface hits and global rays to recover
             # the correct texture lookup and tangent-frame view direction.
-            if spherical_object_mask[i]:
+            if curved_object_mask[i]:
                 query_points = intersection_points[i]
                 query_ray_origins = global_ray_origins
                 query_ray_directions = global_ray_directions
@@ -1644,10 +1628,10 @@ class NAGFunctionalModel(NAGModel):
             if out_of_bounds_termination:
                 flows[~is_inside] = 0.
 
-            # Reproject planar and spherical native flows separately because
-            # the sphere flow lives in equirectangular texture coordinates,
+            # Reproject planar and curved-surface native flows separately because
+            # curved-background flow lives in equirectangular texture coordinates,
             # not in plane coordinates.
-            planar_object_mask = ~spherical_object_mask
+            planar_object_mask = ~curved_object_mask
             flow_end = torch.zeros_like(flows)
             if planar_object_mask.any():
                 planar_idx = planar_object_mask.nonzero(as_tuple=False).squeeze(-1)
@@ -1672,20 +1656,20 @@ class NAGFunctionalModel(NAGModel):
                     uv.unsqueeze(0).unsqueeze(2).expand(len(planar_idx), -1, T, -1)
                 planar_flow_end[~is_inside[planar_idx]] = 0.
                 flow_end[planar_idx] = planar_flow_end
-            if spherical_object_mask.any():
-                spherical_idx = spherical_object_mask.nonzero(as_tuple=False).squeeze(-1)
-                for idx in spherical_idx.tolist():
-                    sphere_obj = objects[idx]
-                    # The sphere background predicts flow in its own texture domain
+            if curved_object_mask.any():
+                curved_idx = curved_object_mask.nonzero(as_tuple=False).squeeze(-1)
+                for idx in curved_idx.tolist():
+                    curved_obj = objects[idx]
+                    # Curved backgrounds predict flow in their own texture domain
                     # (equirectangular UV offsets), not directly in pixels. Move the
-                    # current sphere hit points by that native flow first so we can
+                    # current surface hit points by that native flow first so we can
                     # ask the camera where those flowed surface points would land.
-                    moved_global = sphere_obj.get_flowed_global_points(
+                    moved_global = curved_obj.get_flowed_global_points(
                         points_global=intersection_points[idx],
                         flow=flows[idx],
                         global_position=global_plane_positions[idx],
                     )
-                    # Project the flowed 3D sphere points into the camera frame at
+                    # Project the flowed 3D surface points into the camera frame at
                     # the current timestamps. `local_to_image_coordinates` expects
                     # camera-local 3D points, so convert from global world space to
                     # the local coordinates of the active camera trajectory first.
@@ -1697,9 +1681,9 @@ class NAGFunctionalModel(NAGModel):
                     # Turn those camera-local 3D points into image coordinates using
                     # the same intrinsics/lens model as the rest of the modality
                     # pipeline. The result is the pixel position after applying the
-                    # learned spherical texture flow and reprojecting through the
+                    # learned surface-texture flow and reprojecting through the
                     # actual camera model.
-                    sphere_flow_end = local_to_image_coordinates(
+                    curved_flow_end = local_to_image_coordinates(
                         moved_camera_local.permute(1, 0, 2),
                         self.camera.get_intrinsics(t),
                         self.camera.focal_length,
@@ -1710,14 +1694,14 @@ class NAGFunctionalModel(NAGModel):
                     # space displacement by subtracting the original queried pixel
                     # positions. This matches the planar branch API: exported flow is
                     # always "where the pixel moved to" minus "where it started".
-                    sphere_flow_end = sphere_flow_end - uv.unsqueeze(1).expand(-1, T, -1)
-                    # Rays that never hit the sphere background should not export any
-                    # motion. Zero them out so invalid sphere reprojections do not
+                    curved_flow_end = curved_flow_end - uv.unsqueeze(1).expand(-1, T, -1)
+                    # Rays that never hit the curved background should not export any
+                    # motion. Zero them out so invalid surface reprojections do not
                     # leak into saved modalities.
-                    sphere_flow_end[~is_inside[idx]] = 0.
-                    # Store the final image-space flow for this spherical object into
+                    curved_flow_end[~is_inside[idx]] = 0.
+                    # Store the final image-space flow for this curved object into
                     # the shared modality tensor alongside the planar objects.
-                    flow_end[idx] = sphere_flow_end
+                    flow_end[idx] = curved_flow_end
             flows = flow_end
         return colors, alphas, flows
 

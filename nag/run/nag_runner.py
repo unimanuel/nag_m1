@@ -1405,13 +1405,19 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                         "because both define the final spherical background radius."
                     )
 
-                background_camera_distance = self.get_background_camera_distance( #This background distance used.
-                    masks=masks,
-                    camera=camera,
-                    position_strategy=init_strategy.plane_position_strategy if hasattr(
-                        init_strategy, "plane_position_strategy") else None,
-                    world=world,
-                )
+                if getattr(background_plane_type, "is_ellipsoidal_background", False):
+                    # Ellipsoid geometry is supplied in NAG world coordinates;
+                    # the legacy plane/sphere cutoff-distance heuristic must not
+                    # resize or reposition it.
+                    background_camera_distance = self.config.background_camera_distance
+                else:
+                    background_camera_distance = self.get_background_camera_distance(
+                        masks=masks,
+                        camera=camera,
+                        position_strategy=init_strategy.plane_position_strategy if hasattr(
+                            init_strategy, "plane_position_strategy") else None,
+                        world=world,
+                    )
                 if use_visible_plane_corner_sphere_radius:
                     args["sphere_radius_override"] = \
                         self._compute_visible_plane_corner_sphere_radius(
@@ -1516,6 +1522,19 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
             args["rgb_weight"] = self.config.plane_color_weight
             args["flow_weight"] = self.config.plane_flow_weight
             args["deprecated_flow"] = self.config.deprecated_flow
+            if getattr(plane_type, "is_ellipsoidal_background", False):
+                if self.config.background_ellipsoid_path is None:
+                    raise ValueError(
+                        "background_ellipsoid_path is required for an ellipsoidal background."
+                    )
+                if self.config.background_sphere_radius_override is not None:
+                    raise ValueError(
+                        "background_sphere_radius_override cannot be used with an "
+                        "ellipsoidal background."
+                    )
+                args["ellipsoid_path"] = self.config.background_ellipsoid_path
+                args["ellipsoid_scale_margin"] = \
+                    self.config.background_ellipsoid_scale_margin
             if self.config.background_sphere_radius_override is not None and getattr(plane_type, "is_spherical_background", False):
                 args["sphere_radius_override"] = self.config.background_sphere_radius_override
             return args
