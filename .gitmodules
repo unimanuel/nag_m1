@@ -5,4 +5,4 @@
 [submodule "libs/nag-waymo-processing"]
 	path = libs/nag-waymo-processing
 	url = https://github.com/jp-schneider/nag-waymo-processing.git
-	branch = main
+	branch = feature/waymo-pointcloud-extraction
