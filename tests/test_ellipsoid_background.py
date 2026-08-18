@@ -164,8 +164,12 @@ def test_ellipsoid_background_declares_curved_not_spherical_protocol():
         ViewDependentBackgroundImageEllipsoidSceneNode3D,
     ],
 )
+@pytest.mark.parametrize(
+    "visible_uv_argument",
+    ["ellipsoid_visible_uv_texture", "sphere_visible_uv_texture"],
+)
 def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
-    tmp_path, base_class
+    tmp_path, base_class, visible_uv_argument
 ):
     geometry_path = tmp_path / "ellipsoid.json"
     _write_geometry(geometry_path)
@@ -216,6 +220,7 @@ def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
     )
     world = World()
 
+    visible_uv_kwargs = {visible_uv_argument: {"enabled": True}}
     node = base_class.for_camera.__func__(
         CapturingNode,
         camera=Camera(),
@@ -230,7 +235,7 @@ def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
         color_mask_resolution=[4, 8],
         ellipsoid_path=geometry_path,
         ellipsoid_scale_margin=0.02,
-        ellipsoid_visible_uv_texture={"enabled": True},
+        **visible_uv_kwargs,
     )
 
     assert node is world.child

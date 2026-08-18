@@ -86,3 +86,18 @@ The ellipsoid class supports the same learned equirectangular texture flow and
 view-dependent appearance path as the sphere. The native UV flow is mapped
 back onto the ellipsoid surface and reprojected through the active camera when
 NAG exports image-space flow modalities.
+
+## Visible-UV ellipsoid textures
+
+Ellipsoids also support the visible-UV texture layout used by the
+`*_sph_visuv.yaml` experiments. For compatibility with those existing files,
+the ellipsoid accepts their `background_plane_kwargs.sphere_visible_uv_texture`
+mapping and computes the visible tile using ellipsoid ray intersections. An
+ellipsoid-specific `ellipsoid_visible_uv_texture` mapping is also accepted and
+takes precedence when both are present.
+
+No new renderer changes are required for a visible-UV ellipsoid experiment.
+Use a matching `*_sph_visuv.yaml` as the base config, override the background
+type and ellipsoid path as in the commands above, and give the run an
+ellipsoid-visible-UV name. Do not pass a sphere-radius flag to an ellipsoid
+run.
