@@ -40,6 +40,7 @@ class LoadedEllipsoidGeometry:
     scale_margin: float
     point_count: int
     source_contains_all_points: bool
+    source_point_coverage_fraction: float
 
 
 def load_ellipsoid_geometry(
@@ -59,7 +60,8 @@ def load_ellipsoid_geometry(
         )
     with open(source_path, "r", encoding="utf-8") as file:
         document = json.load(file)
-    if int(document.get("format_version", 0)) != 1:
+    format_version = int(document.get("format_version", 0))
+    if format_version not in (1, 2):
         raise ValueError(
             f"Unsupported ellipsoid format version in {source_path}: "
             f"{document.get('format_version')!r}."
@@ -103,8 +105,21 @@ def load_ellipsoid_geometry(
         raise ValueError(f"Ellipsoid frame_slice is incomplete in {source_path}.")
     normalized_slice = {field: int(frame_slice[field]) for field in required_slice_fields}
     source_contains_all_points = bool(fit.get("contains_all_points", False))
-    if not source_contains_all_points:
+    source_point_coverage_fraction = float(
+        fit.get("point_coverage_fraction", 1.0 if source_contains_all_points else 0.0)
+    )
+    if not 0.0 <= source_point_coverage_fraction <= 1.0:
+        raise ValueError(
+            f"Ellipsoid point coverage must be in [0, 1] in {source_path}, got "
+            f"{source_point_coverage_fraction}."
+        )
+    if format_version == 1 and not source_contains_all_points:
         raise ValueError(f"Ellipsoid source fit does not contain all selected points: {source_path}")
+    if format_version == 2 and source_point_coverage_fraction < 0.99:
+        raise ValueError(
+            f"Robust ellipsoid source fit covers only {source_point_coverage_fraction:.6f} of "
+            f"selected points in {source_path}; at least 0.99 is required."
+        )
 
     return LoadedEllipsoidGeometry(
         source_path=source_path,
@@ -117,6 +132,7 @@ def load_ellipsoid_geometry(
         scale_margin=float(scale_margin),
         point_count=int(document.get("point_count", 0)),
         source_contains_all_points=source_contains_all_points,
+        source_point_coverage_fraction=source_point_coverage_fraction,
     )
 
 
@@ -618,6 +634,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             "sequence": geometry.sequence,
             "frame_slice": geometry.frame_slice,
             "point_count": geometry.point_count,
+            "source_contains_all_points": geometry.source_contains_all_points,
+            "source_point_coverage_fraction": geometry.source_point_coverage_fraction,
             "source_radii": geometry.source_radii.detach().cpu().tolist(),
             "scale_margin": geometry.scale_margin,
             "effective_radii": radii.detach().cpu().tolist(),

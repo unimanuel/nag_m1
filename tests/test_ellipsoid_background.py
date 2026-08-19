@@ -33,11 +33,19 @@ def _global_position(center, rotation):
     return position
 
 
-def _write_geometry(path, contains_all_points=True):
+def _write_geometry(path, contains_all_points=True, format_version=1, point_coverage=None):
+    fit = {
+        "center": [1.0, 2.0, 3.0],
+        "radii": [2.0, 3.0, 4.0],
+        "rotation_columns": torch.eye(3).tolist(),
+        "contains_all_points": contains_all_points,
+    }
+    if point_coverage is not None:
+        fit["point_coverage_fraction"] = point_coverage
     path.write_text(
         json.dumps(
             {
-                "format_version": 1,
+                "format_version": format_version,
                 "sequence": "segment-123",
                 "frame_slice": {
                     "start": 2,
@@ -48,12 +56,7 @@ def _write_geometry(path, contains_all_points=True):
                     "count": 5,
                 },
                 "point_count": 42,
-                "fit": {
-                    "center": [1.0, 2.0, 3.0],
-                    "radii": [2.0, 3.0, 4.0],
-                    "rotation_columns": torch.eye(3).tolist(),
-                    "contains_all_points": contains_all_points,
-                },
+                "fit": fit,
             }
         ),
         encoding="utf-8",
@@ -118,6 +121,33 @@ def test_geometry_loader_rejects_non_enclosing_source_fit(tmp_path):
     path = tmp_path / "ellipsoid.json"
     _write_geometry(path, contains_all_points=False)
     with pytest.raises(ValueError, match="does not contain all"):
+        load_ellipsoid_geometry(path, scale_margin=0.02)
+
+
+def test_geometry_loader_accepts_explicit_robust_coverage(tmp_path):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(
+        path,
+        contains_all_points=False,
+        format_version=2,
+        point_coverage=0.995,
+    )
+
+    geometry = load_ellipsoid_geometry(path, scale_margin=0.02)
+
+    assert not geometry.source_contains_all_points
+    assert geometry.source_point_coverage_fraction == pytest.approx(0.995)
+
+
+def test_geometry_loader_rejects_insufficient_robust_coverage(tmp_path):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(
+        path,
+        contains_all_points=False,
+        format_version=2,
+        point_coverage=0.98,
+    )
+    with pytest.raises(ValueError, match="at least 0.99"):
         load_ellipsoid_geometry(path, scale_margin=0.02)
 
 
