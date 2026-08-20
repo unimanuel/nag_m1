@@ -1535,6 +1535,13 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                 args["ellipsoid_path"] = self.config.background_ellipsoid_path
                 args["ellipsoid_scale_margin"] = \
                     self.config.background_ellipsoid_scale_margin
+                args["ellipsoid_radii_override"] = \
+                    self.config.background_ellipsoid_radii_override
+            elif self.config.background_ellipsoid_radii_override is not None:
+                raise ValueError(
+                    "background_ellipsoid_radii_override can only be used with an "
+                    "ellipsoidal background."
+                )
             if self.config.background_sphere_radius_override is not None and getattr(plane_type, "is_spherical_background", False):
                 args["sphere_radius_override"] = self.config.background_sphere_radius_override
             return args

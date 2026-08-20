@@ -36,6 +36,7 @@ class LoadedEllipsoidGeometry:
     center: torch.Tensor
     source_radii: torch.Tensor
     radii: torch.Tensor
+    radii_override: Optional[torch.Tensor]
     rotation: torch.Tensor
     scale_margin: float
     point_count: int
@@ -46,6 +47,7 @@ class LoadedEllipsoidGeometry:
 def load_ellipsoid_geometry(
     path: Union[os.PathLike, str],
     scale_margin: float,
+    radii_override: Optional[VEC_TYPE] = None,
     dtype: torch.dtype = torch.float32,
     device: Optional[torch.device] = None,
 ) -> LoadedEllipsoidGeometry:
@@ -121,13 +123,29 @@ def load_ellipsoid_geometry(
             f"selected points in {source_path}; at least 0.99 is required."
         )
 
+    effective_radii = source_radii * (1.0 + float(scale_margin))
+    override_tensor = None
+    if radii_override is not None:
+        override_tensor = tensorify(radii_override, dtype=dtype, device=device).reshape(-1)
+        if override_tensor.shape != (3,):
+            raise ValueError(
+                "background_ellipsoid_radii_override must contain exactly three values; "
+                f"received shape {tuple(override_tensor.shape)}."
+            )
+        if not torch.isfinite(override_tensor).all() or torch.any(override_tensor <= 0):
+            raise ValueError(
+                "background_ellipsoid_radii_override must contain three finite positive values."
+            )
+        effective_radii = override_tensor
+
     return LoadedEllipsoidGeometry(
         source_path=source_path,
         sequence=str(document.get("sequence", "")),
         frame_slice=normalized_slice,
         center=center,
         source_radii=source_radii,
-        radii=source_radii * (1.0 + float(scale_margin)),
+        radii=effective_radii,
+        radii_override=override_tensor,
         rotation=rotation,
         scale_margin=float(scale_margin),
         point_count=int(document.get("point_count", 0)),
@@ -524,6 +542,7 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         ellipsoid_visible_uv_texture: Optional[Dict[str, Any]] = None,
         ellipsoid_path: Optional[Union[os.PathLike, str]] = None,
         ellipsoid_scale_margin: float = 0.02,
+        ellipsoid_radii_override: Optional[VEC_TYPE] = None,
         **kwargs,
     ):
         if world is None:
@@ -533,6 +552,7 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         geometry = load_ellipsoid_geometry(
             ellipsoid_path,
             scale_margin=ellipsoid_scale_margin,
+            radii_override=ellipsoid_radii_override,
             dtype=dtype,
             device=times.device,
         )
@@ -638,6 +658,14 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             "source_point_coverage_fraction": geometry.source_point_coverage_fraction,
             "source_radii": geometry.source_radii.detach().cpu().tolist(),
             "scale_margin": geometry.scale_margin,
+            "radii_override": (
+                geometry.radii_override.detach().cpu().tolist()
+                if geometry.radii_override is not None
+                else None
+            ),
+            "radii_source": (
+                "override" if geometry.radii_override is not None else "source_plus_margin"
+            ),
             "effective_radii": radii.detach().cpu().tolist(),
             "center": center.detach().cpu().tolist(),
             "rotation_columns": rotation.detach().cpu().tolist(),

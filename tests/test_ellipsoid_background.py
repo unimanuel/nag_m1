@@ -117,6 +117,37 @@ def test_geometry_loader_applies_margin_and_validates_yaml_identity(tmp_path):
         validate_ellipsoid_matches_config(geometry, config)
 
 
+def test_geometry_loader_final_radii_override_bypasses_margin(tmp_path):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(path)
+
+    geometry = load_ellipsoid_geometry(
+        path,
+        scale_margin=0.25,
+        radii_override=[8.0, 6.0, 5.0],
+    )
+
+    assert geometry.source_radii.tolist() == [2.0, 3.0, 4.0]
+    assert geometry.radii_override.tolist() == [8.0, 6.0, 5.0]
+    assert geometry.radii.tolist() == [8.0, 6.0, 5.0]
+
+
+@pytest.mark.parametrize(
+    "override, message",
+    [
+        ([1.0, 2.0], "exactly three"),
+        ([1.0, 0.0, 3.0], "finite positive"),
+        ([1.0, float("inf"), 3.0], "finite positive"),
+    ],
+)
+def test_geometry_loader_rejects_invalid_final_radii_override(tmp_path, override, message):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(path)
+
+    with pytest.raises(ValueError, match=message):
+        load_ellipsoid_geometry(path, scale_margin=0.02, radii_override=override)
+
+
 def test_geometry_loader_rejects_non_enclosing_source_fit(tmp_path):
     path = tmp_path / "ellipsoid.json"
     _write_geometry(path, contains_all_points=False)

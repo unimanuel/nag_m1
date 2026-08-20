@@ -346,6 +346,11 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     """Uniform fractional expansion applied to all fitted ellipsoid radii at load time.
     This keeps cameras and fitted LiDAR points safely inside the rendering surface."""
 
+    background_ellipsoid_radii_override: Optional[List[float]] = field(default=None)
+    """Optional final radii override for controlled ellipsoid experiments.
+    Exactly three positive values are required. When set, these are the effective
+    rendered radii and ``background_ellipsoid_scale_margin`` is not applied to them."""
+
     is_background_color_learnable: bool = field(default=True)
     """If the background color should be learnable."""
 
