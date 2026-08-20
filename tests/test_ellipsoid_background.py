@@ -132,6 +132,38 @@ def test_geometry_loader_final_radii_override_bypasses_margin(tmp_path):
     assert geometry.radii.tolist() == [8.0, 6.0, 5.0]
 
 
+def test_geometry_loader_caps_margin_expanded_radii_per_axis(tmp_path):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(path)
+
+    geometry = load_ellipsoid_geometry(path, scale_margin=0.25, max_radius=3.5)
+
+    assert geometry.max_radius == pytest.approx(3.5)
+    assert geometry.radii.tolist() == pytest.approx([2.5, 3.5, 3.5])
+
+
+@pytest.mark.parametrize("max_radius", [0.0, -1.0, float("inf"), float("nan")])
+def test_geometry_loader_rejects_invalid_max_radius(tmp_path, max_radius):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(path)
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        load_ellipsoid_geometry(path, scale_margin=0.02, max_radius=max_radius)
+
+
+def test_geometry_loader_rejects_override_and_max_radius_together(tmp_path):
+    path = tmp_path / "ellipsoid.json"
+    _write_geometry(path)
+
+    with pytest.raises(ValueError, match="cannot be used together"):
+        load_ellipsoid_geometry(
+            path,
+            scale_margin=0.02,
+            radii_override=[4.0, 4.0, 4.0],
+            max_radius=5.0,
+        )
+
+
 @pytest.mark.parametrize(
     "override, message",
     [

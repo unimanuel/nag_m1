@@ -351,6 +351,11 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     Exactly three positive values are required. When set, these are the effective
     rendered radii and ``background_ellipsoid_scale_margin`` is not applied to them."""
 
+    background_ellipsoid_max_radius: Optional[float] = field(default=None)
+    """Optional per-axis upper bound for the final rendered ellipsoid radii.
+    The scalar cap is applied after ``background_ellipsoid_scale_margin`` and is
+    mutually exclusive with ``background_ellipsoid_radii_override``."""
+
     is_background_color_learnable: bool = field(default=True)
     """If the background color should be learnable."""
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 """PCA-ellipsoid background geometry loaded from Waymo preprocessing output."""
 
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
@@ -37,6 +38,7 @@ class LoadedEllipsoidGeometry:
     source_radii: torch.Tensor
     radii: torch.Tensor
     radii_override: Optional[torch.Tensor]
+    max_radius: Optional[float]
     rotation: torch.Tensor
     scale_margin: float
     point_count: int
@@ -48,6 +50,7 @@ def load_ellipsoid_geometry(
     path: Union[os.PathLike, str],
     scale_margin: float,
     radii_override: Optional[VEC_TYPE] = None,
+    max_radius: Optional[float] = None,
     dtype: torch.dtype = torch.float32,
     device: Optional[torch.device] = None,
 ) -> LoadedEllipsoidGeometry:
@@ -123,6 +126,17 @@ def load_ellipsoid_geometry(
             f"selected points in {source_path}; at least 0.99 is required."
         )
 
+    if radii_override is not None and max_radius is not None:
+        raise ValueError(
+            "background_ellipsoid_radii_override and background_ellipsoid_max_radius "
+            "cannot be used together."
+        )
+    normalized_max_radius = None
+    if max_radius is not None:
+        normalized_max_radius = float(max_radius)
+        if not math.isfinite(normalized_max_radius) or normalized_max_radius <= 0:
+            raise ValueError("background_ellipsoid_max_radius must be finite and positive.")
+
     effective_radii = source_radii * (1.0 + float(scale_margin))
     override_tensor = None
     if radii_override is not None:
@@ -137,6 +151,8 @@ def load_ellipsoid_geometry(
                 "background_ellipsoid_radii_override must contain three finite positive values."
             )
         effective_radii = override_tensor
+    elif normalized_max_radius is not None:
+        effective_radii = torch.clamp(effective_radii, max=normalized_max_radius)
 
     return LoadedEllipsoidGeometry(
         source_path=source_path,
@@ -146,6 +162,7 @@ def load_ellipsoid_geometry(
         source_radii=source_radii,
         radii=effective_radii,
         radii_override=override_tensor,
+        max_radius=normalized_max_radius,
         rotation=rotation,
         scale_margin=float(scale_margin),
         point_count=int(document.get("point_count", 0)),
@@ -543,6 +560,7 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         ellipsoid_path: Optional[Union[os.PathLike, str]] = None,
         ellipsoid_scale_margin: float = 0.02,
         ellipsoid_radii_override: Optional[VEC_TYPE] = None,
+        ellipsoid_max_radius: Optional[float] = None,
         **kwargs,
     ):
         if world is None:
@@ -553,6 +571,7 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             ellipsoid_path,
             scale_margin=ellipsoid_scale_margin,
             radii_override=ellipsoid_radii_override,
+            max_radius=ellipsoid_max_radius,
             dtype=dtype,
             device=times.device,
         )
@@ -663,8 +682,15 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
                 if geometry.radii_override is not None
                 else None
             ),
+            "max_radius": geometry.max_radius,
             "radii_source": (
-                "override" if geometry.radii_override is not None else "source_plus_margin"
+                "override"
+                if geometry.radii_override is not None
+                else (
+                    "source_plus_margin_capped"
+                    if geometry.max_radius is not None
+                    else "source_plus_margin"
+                )
             ),
             "effective_radii": radii.detach().cpu().tolist(),
             "center": center.detach().cpu().tolist(),

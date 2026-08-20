@@ -164,6 +164,7 @@ class ViewDependentBackgroundImageEllipsoidSceneNode3D(
         ellipsoid_path: Optional[os.PathLike] = None,
         ellipsoid_scale_margin: float = 0.02,
         ellipsoid_radii_override: Optional[VEC_TYPE] = None,
+        ellipsoid_max_radius: Optional[float] = None,
         **kwargs,
     ):
         return BackgroundImageEllipsoidSceneNode3D.for_camera.__func__(
@@ -193,5 +194,6 @@ class ViewDependentBackgroundImageEllipsoidSceneNode3D(
             ellipsoid_path=ellipsoid_path,
             ellipsoid_scale_margin=ellipsoid_scale_margin,
             ellipsoid_radii_override=ellipsoid_radii_override,
+            ellipsoid_max_radius=ellipsoid_max_radius,
             **kwargs,
         )
