@@ -66,7 +66,7 @@ def load_ellipsoid_geometry(
     with open(source_path, "r", encoding="utf-8") as file:
         document = json.load(file)
     format_version = int(document.get("format_version", 0))
-    if format_version not in (1, 2):
+    if format_version not in (1, 2, 3):
         raise ValueError(
             f"Unsupported ellipsoid format version in {source_path}: "
             f"{document.get('format_version')!r}."
@@ -125,6 +125,10 @@ def load_ellipsoid_geometry(
             f"Robust ellipsoid source fit covers only {source_point_coverage_fraction:.6f} of "
             f"selected points in {source_path}; at least 0.99 is required."
         )
+    # Version 3 is a ray-depth proxy fit.  It intentionally minimizes
+    # camera-ray depth mismatch rather than enclosing a fixed percentage of
+    # point samples, so its validity is established by the final camera-inside
+    # check in ``for_camera`` below instead of a point-coverage threshold.
 
     if radii_override is not None and max_radius is not None:
         raise ValueError(
