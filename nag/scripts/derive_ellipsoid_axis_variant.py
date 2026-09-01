@@ -28,13 +28,25 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-json", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
         "--radii",
-        required=True,
         type=float,
         nargs=3,
-        metavar=("FORWARD", "LATERAL", "UP"),
-        help="Replacement radii in the source fit's local road-aligned frame.",
+        metavar=("AXIS_0", "AXIS_1", "AXIS_2"),
+        help="Replacement radii in the source fit's local frame.",
+    )
+    mode.add_argument(
+        "--match-vertical-to-lateral",
+        action="store_true",
+        help="Raise the physical vertical radius to at least the physical left/right radius.",
+    )
+    parser.add_argument(
+        "--world-up-axis",
+        type=int,
+        choices=(0, 1, 2),
+        default=1,
+        help="World-coordinate index representing physical up (default: 1 for NAG Waymo Y-up).",
     )
     parser.add_argument("--label", required=True, help="Human-readable variant label.")
     return parser.parse_args()
@@ -124,13 +136,10 @@ def main() -> None:
     args = parse_args()
     source_json = args.source_json.resolve()
     output_dir = args.output_dir.resolve()
-    radii = np.asarray(args.radii, dtype=np.float64)
     if not source_json.is_file():
         raise FileNotFoundError(f"Missing source ellipsoid JSON: {source_json}")
     if output_dir.exists():
         raise FileExistsError(f"Refusing to overwrite existing output directory: {output_dir}")
-    if not np.isfinite(radii).all() or np.any(radii <= 0.0):
-        raise ValueError("All replacement radii must be finite and positive.")
 
     with source_json.open("r", encoding="utf-8") as file:
         source_document = json.load(file)
@@ -142,6 +151,37 @@ def main() -> None:
     rotation = np.asarray(fit.get("rotation_columns"), dtype=np.float64)
     if center.shape != (3,) or rotation.shape != (3, 3):
         raise ValueError("Source fit must contain a 3D center and 3x3 rotation_columns.")
+    source_radii = np.asarray(fit.get("radii"), dtype=np.float64)
+    if source_radii.shape != (3,) or not np.isfinite(source_radii).all() or np.any(source_radii <= 0.0):
+        raise ValueError("Source fit must contain three finite positive radii.")
+    if args.match_vertical_to_lateral:
+        vertical_axis = int(np.argmax(np.abs(rotation[args.world_up_axis])))
+        vertical_alignment = float(abs(rotation[args.world_up_axis, vertical_axis]))
+        if vertical_alignment < 0.95:
+            raise ValueError(
+                "Cannot identify a physical vertical local axis reliably: "
+                f"best world-up alignment is only {vertical_alignment:.3f}."
+            )
+        if vertical_axis == 0:
+            raise ValueError("The source forward axis is aligned with world up, which is not a road-aligned fit.")
+        lateral_axes = [axis for axis in range(3) if axis not in (0, vertical_axis)]
+        if len(lateral_axes) != 1:
+            raise AssertionError("Expected one lateral axis after identifying forward and vertical axes.")
+        lateral_axis = lateral_axes[0]
+        radii = source_radii.copy()
+        radii[vertical_axis] = max(radii[vertical_axis], radii[lateral_axis])
+        derivation = {
+            "operation": "Raised the physical vertical radius to the physical left/right radius.",
+            "world_up_axis": args.world_up_axis,
+            "vertical_local_axis": vertical_axis,
+            "lateral_local_axis": lateral_axis,
+            "vertical_axis_alignment": vertical_alignment,
+        }
+    else:
+        radii = np.asarray(args.radii, dtype=np.float64)
+        if not np.isfinite(radii).all() or np.any(radii <= 0.0):
+            raise ValueError("All replacement radii must be finite and positive.")
+        derivation = {"operation": "Replaced the local-axis radii explicitly."}
 
     source_dir = source_json.parent
     output_dir.mkdir(parents=True)
@@ -170,8 +210,8 @@ def main() -> None:
     document["derived_variant"] = {
         "label": args.label,
         "source_ellipsoid_json": str(source_json),
-        "operation": "Replaced local [forward, lateral, up] radii; center and rotation unchanged.",
-        "source_radii": source_document["fit"]["radii"],
+        **derivation,
+        "source_radii": source_radii.tolist(),
         "replacement_radii": radii.tolist(),
         "point_coverage_source": source_points_name,
         "ray_depth_metrics_recomputed": False,
@@ -188,7 +228,7 @@ def main() -> None:
         file.write("\n")
     print(f"Created {output_dir}")
     print(f"  label: {args.label}")
-    print(f"  radii [forward, lateral, up]: {radii.tolist()}")
+    print(f"  local radii: {radii.tolist()}")
     print(f"  point coverage: {fit['point_coverage_fraction']:.6f}")
 
 
