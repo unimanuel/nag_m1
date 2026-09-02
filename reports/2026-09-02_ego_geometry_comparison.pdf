@@ -1,0 +1,1585 @@
+%PDF-1.4
+%\xe2\xe3\xcf\xd3
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R 14 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 4895 >>
+stream
+BT
+0.070 0.200 0.380 rg
+/F2 18 Tf
+36.0 568.0 Td
+(Waymo ego-background comparison through 2026-09-02) Tj
+ET
+BT
+0.250 0.250 0.250 rg
+/F1 9.3 Tf
+36.0 545.0 Td
+(Final test-image means from completed runs. Higher PSNR/SSIM and lower LPIPS are better.) Tj
+ET
+0.250 G
+1.10 w
+36.0 535.0 m
+756.0 535.0 l
+S
+BT
+0.070 0.200 0.380 rg
+/F2 11 Tf
+36.0 510.0 Td
+(Question answered) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 494.0 Td
+(This revision brings the current ray-depth v4 experiments into the earlier sphere and camera-centred AR3 comparison. It explicitly compares the) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 481.0 Td
+(moderate-Y ellipsoid with the common Sphere Visible-UV reference and both AR3 modes for all three metrics on every one of the seven ego intervals.) Tj
+ET
+BT
+0.070 0.200 0.380 rg
+/F2 11 Tf
+36.0 458.0 Td
+(Definitions) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 442.0 Td
+(AR3 is the camera-centred, robust 3:1 aspect-ratio ellipsoid with per-axis sphere clipping. Moderate-Y starts from the v4 ray-depth proxy fit and) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 429.0 Td
+(raises its physical vertical radius to equal its lateral radius. UV denotes the visible-UV training configuration.) Tj
+ET
+BT
+0.070 0.200 0.380 rg
+/F2 11 Tf
+36.0 406.0 Td
+(Primary result) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 390.0 Td
+(Moderate-Y is not a universal winner in PSNR: relative to Sphere UV, it wins on only two of seven sequences \(with one practical tie in UV mode\).) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 377.0 Td
+(Its small macro PSNR gain is driven by those two wins. It nevertheless improves macro SSIM and LPIPS, so its evidence is mixed rather than a clean) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.3 Tf
+48.0 364.0 Td
+(replacement for the sphere.) Tj
+ET
+BT
+0.070 0.200 0.380 rg
+/F2 12 Tf
+36.0 341.0 Td
+(Seven-sequence equal-weight macro average) Tj
+ET
+0.840 g
+36.0 308.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+40.0 318.0 Td
+(Mode) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+230.0 318.0 Td
+(PSNR) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+315.0 318.0 Td
+(SSIM) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+400.0 318.0 Td
+(LPIPS) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+485.0 318.0 Td
+(Interpretation) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 292.0 Td
+(Sphere Visible-UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+230.0 292.0 Td
+(28.075) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+315.0 292.0 Td
+(0.8433) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+400.0 292.0 Td
+(0.3140) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+485.0 292.0 Td
+(Common all-sequence reference) Tj
+ET
+0.840 G
+0.30 w
+36.0 283.0 m
+756.0 283.0 l
+S
+0.960 g
+36.0 258.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 267.0 Td
+(AR3) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+230.0 267.0 Td
+(28.030) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+315.0 267.0 Td
+(0.8427) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+400.0 267.0 Td
+(0.3166) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+485.0 267.0 Td
+(Regular clipped AR3) Tj
+ET
+0.840 G
+0.30 w
+36.0 258.0 m
+756.0 258.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 242.0 Td
+(AR3 UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+230.0 242.0 Td
+(28.052) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+315.0 242.0 Td
+(0.8430) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+400.0 242.0 Td
+(0.3141) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+485.0 242.0 Td
+(Visible-UV clipped AR3) Tj
+ET
+0.840 G
+0.30 w
+36.0 233.0 m
+756.0 233.0 l
+S
+0.960 g
+36.0 208.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 217.0 Td
+(Ray-depth) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+230.0 217.0 Td
+(27.982) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+315.0 217.0 Td
+(0.8463) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+400.0 217.0 Td
+(0.3115) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+485.0 217.0 Td
+(Raw v4 proxy; vertically thin) Tj
+ET
+0.840 G
+0.30 w
+36.0 208.0 m
+756.0 208.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 192.0 Td
+(Moderate-Y) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+230.0 192.0 Td
+(28.112) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+315.0 192.0 Td
+(0.8489) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+400.0 192.0 Td
+(0.3099) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+485.0 192.0 Td
+(v4 proxy, vertical radius = lateral) Tj
+ET
+0.840 G
+0.30 w
+36.0 183.0 m
+756.0 183.0 l
+S
+0.960 g
+36.0 158.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 167.0 Td
+(Moderate-Y UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+230.0 167.0 Td
+(28.100) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+315.0 167.0 Td
+(0.8484) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+400.0 167.0 Td
+(0.3084) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+485.0 167.0 Td
+(Visible-UV moderate-Y) Tj
+ET
+0.840 G
+0.30 w
+36.0 158.0 m
+756.0 158.0 l
+S
+BT
+0.350 0.350 0.350 rg
+/F1 8 Tf
+36.0 28.0 Td
+(Macro averages give each interval equal weight; they are not frame-weighted. Single-run differences below about 0.05 dB are best treated as ties.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 3127 >>
+stream
+BT
+0.070 0.200 0.380 rg
+/F2 18 Tf
+36.0 568.0 Td
+(Individual W191 sequence comparison) Tj
+ET
+BT
+0.250 0.250 0.250 rg
+/F1 9.3 Tf
+36.0 545.0 Td
+(Each cell is PSNR / SSIM / LPIPS. The highlighted purpose is direct Moderate-Y versus Sphere and AR3 comparison.) Tj
+ET
+0.250 G
+1.10 w
+36.0 535.0 m
+756.0 535.0 l
+S
+0.840 g
+36.0 482.0 715.0 30.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+40.0 497.0 Td
+(Sequence) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+145.0 497.0 Td
+(Sphere UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+267.0 497.0 Td
+(AR3) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+389.0 497.0 Td
+(AR3 UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+511.0 497.0 Td
+(Moderate-Y) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+633.0 497.0 Td
+(Moderate-Y UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 466.0 Td
+(W191 0-40) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 466.0 Td
+(28.197 / 0.828 / 0.321) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 466.0 Td
+(28.231 / 0.834 / 0.316) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 466.0 Td
+(28.262 / 0.834 / 0.314) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 466.0 Td
+(28.622 / 0.849 / 0.298) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 466.0 Td
+(28.670 / 0.850 / 0.296) Tj
+ET
+0.840 G
+0.30 w
+36.0 452.0 m
+751.0 452.0 l
+S
+0.960 g
+36.0 422.0 715.0 30.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 436.0 Td
+(W191 40-128) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 436.0 Td
+(29.911 / 0.877 / 0.273) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 436.0 Td
+(29.807 / 0.875 / 0.279) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 436.0 Td
+(29.858 / 0.876 / 0.275) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 436.0 Td
+(29.805 / 0.878 / 0.272) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 436.0 Td
+(29.854 / 0.878 / 0.270) Tj
+ET
+0.840 G
+0.30 w
+36.0 422.0 m
+751.0 422.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 406.0 Td
+(W191 128-198) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 406.0 Td
+(26.063 / 0.762 / 0.424) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 406.0 Td
+(25.995 / 0.759 / 0.425) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 406.0 Td
+(25.956 / 0.759 / 0.423) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 406.0 Td
+(26.014 / 0.765 / 0.416) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 406.0 Td
+(26.063 / 0.767 / 0.414) Tj
+ET
+0.840 G
+0.30 w
+36.0 392.0 m
+751.0 392.0 l
+S
+BT
+0.070 0.200 0.380 rg
+/F2 11 Tf
+36.0 370.0 Td
+(PSNR reading) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 354.0 Td
+(- 0-40: both Moderate-Y modes beat Sphere UV and AR3 decisively; raw ray-depth is the highest PSNR but has worse LPIPS than Moderate-Y UV.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 338.0 Td
+(- 40-128: Sphere UV is highest PSNR; Moderate-Y UV is only 0.056 dB behind and has the best SSIM and LPIPS.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 322.0 Td
+(- 128-198: Moderate-Y UV is a PSNR tie with Sphere UV \(-0.00002 dB\) and has materially better SSIM and LPIPS.) Tj
+ET
+BT
+0.350 0.350 0.350 rg
+/F1 8 Tf
+36.0 28.0 Td
+(Sphere regular is absent for the W191 historic runs, so Sphere UV is the fair common reference here. No metric has been inferred from a missing run.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 3767 >>
+stream
+BT
+0.070 0.200 0.380 rg
+/F2 18 Tf
+36.0 568.0 Td
+(Individual W254 sequence comparison) Tj
+ET
+BT
+0.250 0.250 0.250 rg
+/F1 9.3 Tf
+36.0 545.0 Td
+(Each cell is PSNR / SSIM / LPIPS. The highlighted purpose is direct Moderate-Y versus Sphere and AR3 comparison.) Tj
+ET
+0.250 G
+1.10 w
+36.0 535.0 m
+756.0 535.0 l
+S
+0.840 g
+36.0 482.0 715.0 30.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+40.0 497.0 Td
+(Sequence) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+145.0 497.0 Td
+(Sphere UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+267.0 497.0 Td
+(AR3) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+389.0 497.0 Td
+(AR3 UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+511.0 497.0 Td
+(Moderate-Y) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.2 Tf
+633.0 497.0 Td
+(Moderate-Y UV) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 466.0 Td
+(W254 0-37) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 466.0 Td
+(29.124 / 0.890 / 0.268) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 466.0 Td
+(28.992 / 0.887 / 0.278) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 466.0 Td
+(29.034 / 0.888 / 0.274) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 466.0 Td
+(28.883 / 0.887 / 0.280) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 466.0 Td
+(28.827 / 0.886 / 0.277) Tj
+ET
+0.840 G
+0.30 w
+36.0 452.0 m
+751.0 452.0 l
+S
+0.960 g
+36.0 422.0 715.0 30.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 436.0 Td
+(W254 37-81) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 436.0 Td
+(27.431 / 0.833 / 0.319) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 436.0 Td
+(27.340 / 0.829 / 0.326) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 436.0 Td
+(27.294 / 0.828 / 0.324) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 436.0 Td
+(27.859 / 0.844 / 0.314) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 436.0 Td
+(27.726 / 0.841 / 0.313) Tj
+ET
+0.840 G
+0.30 w
+36.0 422.0 m
+751.0 422.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 406.0 Td
+(W254 86-137) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 406.0 Td
+(27.399 / 0.840 / 0.329) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 406.0 Td
+(27.320 / 0.839 / 0.324) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 406.0 Td
+(27.383 / 0.840 / 0.323) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 406.0 Td
+(27.261 / 0.844 / 0.321) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 406.0 Td
+(27.236 / 0.843 / 0.320) Tj
+ET
+0.840 G
+0.30 w
+36.0 392.0 m
+751.0 392.0 l
+S
+0.960 g
+36.0 362.0 715.0 30.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+40.0 376.0 Td
+(W254 139-195) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+145.0 376.0 Td
+(28.404 / 0.873 / 0.265) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+267.0 376.0 Td
+(28.524 / 0.876 / 0.268) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+389.0 376.0 Td
+(28.578 / 0.877 / 0.264) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+511.0 376.0 Td
+(28.342 / 0.875 / 0.269) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.2 Tf
+633.0 376.0 Td
+(28.325 / 0.875 / 0.269) Tj
+ET
+0.840 G
+0.30 w
+36.0 362.0 m
+751.0 362.0 l
+S
+BT
+0.070 0.200 0.380 rg
+/F2 11 Tf
+36.0 340.0 Td
+(PSNR reading) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 324.0 Td
+(- 0-37: Sphere UV remains best on all three metrics; Moderate-Y is clearly behind.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 308.0 Td
+(- 37-81: raw ray-depth is highest PSNR and best SSIM/LPIPS; both Moderate-Y modes also clearly beat Sphere and AR3.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 292.0 Td
+(- 86-137: Sphere UV is highest PSNR, while Moderate-Y UV has the best LPIPS; AR3 is the best regular ellipsoid PSNR.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9 Tf
+48.0 276.0 Td
+(- 139-195: AR3 UV is highest PSNR and LPIPS; Moderate-Y is below Sphere UV.) Tj
+ET
+BT
+0.350 0.350 0.350 rg
+/F1 8 Tf
+36.0 28.0 Td
+(Sphere regular is absent for the W191 historic runs, so Sphere UV is the fair common reference here. No metric has been inferred from a missing run.) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 4614 >>
+stream
+BT
+0.070 0.200 0.380 rg
+/F2 18 Tf
+36.0 568.0 Td
+(Moderate-Y: direct comparison and interpretation) Tj
+ET
+BT
+0.250 0.250 0.250 rg
+/F1 9.3 Tf
+36.0 545.0 Td
+(Moderate-Y regular is compared with Sphere UV; this is the only sphere baseline available across all seven intervals.) Tj
+ET
+0.250 G
+1.10 w
+36.0 535.0 m
+756.0 535.0 l
+S
+0.840 g
+36.0 487.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+40.0 497.0 Td
+(Sequence) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+220.0 497.0 Td
+(d PSNR) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+340.0 497.0 Td
+(d SSIM) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+460.0 497.0 Td
+(d LPIPS) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 8.2 Tf
+580.0 497.0 Td
+(PSNR result) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 471.0 Td
+(W191 0-40) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 471.0 Td
+(+0.425) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 471.0 Td
+(+0.0217) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 471.0 Td
+(-0.0227) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 471.0 Td
+(better) Tj
+ET
+0.840 G
+0.30 w
+36.0 462.0 m
+756.0 462.0 l
+S
+0.960 g
+36.0 437.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 446.0 Td
+(W191 40-128) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 446.0 Td
+(-0.106) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 446.0 Td
+(+0.0008) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 446.0 Td
+(-0.0010) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 446.0 Td
+(worse) Tj
+ET
+0.840 G
+0.30 w
+36.0 437.0 m
+756.0 437.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 421.0 Td
+(W191 128-198) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 421.0 Td
+(-0.050) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 421.0 Td
+(+0.0023) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 421.0 Td
+(-0.0075) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 421.0 Td
+(worse) Tj
+ET
+0.840 G
+0.30 w
+36.0 412.0 m
+756.0 412.0 l
+S
+0.960 g
+36.0 387.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 396.0 Td
+(W254 0-37) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 396.0 Td
+(-0.240) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 396.0 Td
+(-0.0027) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 396.0 Td
+(+0.0121) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 396.0 Td
+(worse) Tj
+ET
+0.840 G
+0.30 w
+36.0 387.0 m
+756.0 387.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 371.0 Td
+(W254 37-81) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 371.0 Td
+(+0.429) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 371.0 Td
+(+0.0112) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 371.0 Td
+(-0.0058) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 371.0 Td
+(better) Tj
+ET
+0.840 G
+0.30 w
+36.0 362.0 m
+756.0 362.0 l
+S
+0.960 g
+36.0 337.0 720.0 25.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 346.0 Td
+(W254 86-137) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 346.0 Td
+(-0.137) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 346.0 Td
+(+0.0039) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 346.0 Td
+(-0.0081) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 346.0 Td
+(worse) Tj
+ET
+0.840 G
+0.30 w
+36.0 337.0 m
+756.0 337.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+40.0 321.0 Td
+(W254 139-195) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+220.0 321.0 Td
+(-0.062) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+340.0 321.0 Td
+(+0.0017) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+460.0 321.0 Td
+(+0.0041) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 8.2 Tf
+580.0 321.0 Td
+(worse) Tj
+ET
+0.840 G
+0.30 w
+36.0 312.0 m
+756.0 312.0 l
+S
+BT
+0.070 0.200 0.380 rg
+/F2 12 Tf
+36.0 292.0 Td
+(What the deltas mean) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.2 Tf
+48.0 276.0 Td
+(- Moderate-Y regular is higher in PSNR on W191 0-40 and W254 37-81, and lower on the other five intervals. Those two gains are large enough to) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.2 Tf
+48.0 263.0 Td
+(yield a +0.037 dB seven-sequence macro advantage over Sphere UV.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.2 Tf
+48.0 245.0 Td
+(- It improves SSIM on six of seven intervals and LPIPS on five of seven. Thus the average gain is not merely a PSNR accident, but the instability) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.2 Tf
+48.0 232.0 Td
+(across intervals prevents a production-default recommendation.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.2 Tf
+48.0 214.0 Td
+(- Visible-UV is not consistently additive: it helps Moderate-Y in W191 0-40 and W191 128-198 but decreases its PSNR on five intervals. It is) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.2 Tf
+48.0 201.0 Td
+(worthwhile as a separate experiment mode, not as an assumed upgrade.) Tj
+ET
+BT
+0.350 0.350 0.350 rg
+/F1 8 Tf
+36.0 28.0 Td
+(For LPIPS, a negative delta is an improvement. Delta columns are Moderate-Y regular minus Sphere UV.) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Length 5260 >>
+stream
+BT
+0.070 0.200 0.380 rg
+/F2 18 Tf
+36.0 568.0 Td
+(Earlier geometry experiments and what they established) Tj
+ET
+BT
+0.250 0.250 0.250 rg
+/F1 9.3 Tf
+36.0 545.0 Td
+(Controlled W254 86-137 ablations isolate the effect of centering, clipping, and cross-section thickness.) Tj
+ET
+0.250 G
+1.10 w
+36.0 535.0 m
+756.0 535.0 l
+S
+0.840 g
+36.0 484.0 720.0 28.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F2 7.3 Tf
+40.0 497.0 Td
+(W254 86-137 regular mode) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.3 Tf
+260.0 497.0 Td
+(Effective radii \(m\)) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.3 Tf
+440.0 497.0 Td
+(PSNR / SSIM / LPIPS) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F2 7.3 Tf
+605.0 497.0 Td
+(Conclusion) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 468.0 Td
+(Plane) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 468.0 Td
+(-) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 468.0 Td
+(24.329 / .777 / .386) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 468.0 Td
+(Worst broad baseline) Tj
+ET
+0.840 G
+0.30 w
+36.0 456.0 m
+756.0 456.0 l
+S
+0.960 g
+36.0 428.0 720.0 28.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 440.0 Td
+(Original point-centred PCA) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 440.0 Td
+(70.81, 37.26, 5.96) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 440.0 Td
+(26.020 / .820 / .345) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 440.0 Td
+(Thin height and off-centre geometry fail) Tj
+ET
+0.840 G
+0.30 w
+36.0 428.0 m
+756.0 428.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 412.0 Td
+(Centred robust AR3, uncapped) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 412.0 Td
+(89.12, 29.71, 29.71) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 412.0 Td
+(26.275 / .822 / .343) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 412.0 Td
+(Centering alone is insufficient) Tj
+ET
+0.840 G
+0.30 w
+36.0 400.0 m
+756.0 400.0 l
+S
+0.960 g
+36.0 372.0 720.0 28.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 384.0 Td
+(Centred all-point, sphere-clipped) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 384.0 Td
+(58.62, 49.01, 7.01) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 384.0 Td
+(26.780 / .835 / .336) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 384.0 Td
+(Clipping helps; thin axis still costly) Tj
+ET
+0.840 G
+0.30 w
+36.0 372.0 m
+756.0 372.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 356.0 Td
+(Narrow thin) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 356.0 Td
+(58.62, 29.71, 7.01) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 356.0 Td
+(27.012 / .838 / .331) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 356.0 Td
+(Still too thin) Tj
+ET
+0.840 G
+0.30 w
+36.0 344.0 m
+756.0 344.0 l
+S
+0.960 g
+36.0 316.0 720.0 28.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 328.0 Td
+(True sphere) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 328.0 Td
+(58.62, 58.62, 58.62) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 328.0 Td
+(27.207 / .836 / .335) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 328.0 Td
+(Strong stable reference) Tj
+ET
+0.840 G
+0.30 w
+36.0 316.0 m
+756.0 316.0 l
+S
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 300.0 Td
+(AR3 centred, sphere-clipped) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 300.0 Td
+(58.62, 29.71, 29.71) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 300.0 Td
+(27.320 / .839 / .324) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 300.0 Td
+(Selected early ellipsoid) Tj
+ET
+0.840 G
+0.30 w
+36.0 288.0 m
+756.0 288.0 l
+S
+0.960 g
+36.0 260.0 720.0 28.0 re
+f
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+40.0 272.0 Td
+(Wide thick) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+260.0 272.0 Td
+(58.62, 49.01, 29.71) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+440.0 272.0 Td
+(27.322 / .838 / .326) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 7.3 Tf
+605.0 272.0 Td
+(No benefit from wider lateral radius) Tj
+ET
+0.840 G
+0.30 w
+36.0 260.0 m
+756.0 260.0 l
+S
+BT
+0.070 0.200 0.380 rg
+/F2 12 Tf
+36.0 242.0 Td
+(Ray-depth v4 changes the question) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 226.0 Td
+(- The v4 ray-depth proxy places the surface using FRONT camera rays and background LiDAR depth, rather than PCA point extents. Its raw fit is) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 213.0 Td
+(vertically flat; Moderate-Y is the controlled attempt to remove that thin vertical dimension while retaining the fitted forward/lateral placement.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 195.0 Td
+(- Proxy ray-depth error does not predict NAG quality reliably: W254 0-37 and 139-195 have low depth error yet Sphere UV wins, while W254 37-81 has a) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 182.0 Td
+(higher proxy error but ray-depth and Moderate-Y perform best. The current fit objective is therefore not a complete proxy for multi-view rendering) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 169.0 Td
+(difficulty.) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 151.0 Td
+(- The next principled fitting direction is a visibility-aware, multi-frame reprojection or parallax-consistency objective, tested first on intervals) Tj
+ET
+BT
+0.040 0.040 0.040 rg
+/F1 9.1 Tf
+48.0 138.0 Td
+(where the present modes disagree. It should be treated as a new experiment, not a conclusion from these single-run comparisons.) Tj
+ET
+BT
+0.350 0.350 0.350 rg
+/F1 8 Tf
+36.0 28.0 Td
+(All listed results are final training means from the named run folders. This report records evidence, not a statistically replicated ranking.) Tj
+ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 13 0 R >>
+endobj
+xref
+0 15
+0000000000 65535 f
+0000000027 00000 n
+0000000076 00000 n
+0000000160 00000 n
+0000000230 00000 n
+0000000305 00000 n
+0000005251 00000 n
+0000005387 00000 n
+0000008565 00000 n
+0000008701 00000 n
+0000012519 00000 n
+0000012656 00000 n
+0000017322 00000 n
+0000017460 00000 n
+0000022772 00000 n
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+22910
+%%EOF
