@@ -356,6 +356,11 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     The scalar cap is applied after ``background_ellipsoid_scale_margin`` and is
     mutually exclusive with ``background_ellipsoid_radii_override``."""
 
+    background_ellipsoid_texture_orientation: str = field(default="legacy")
+    """Ellipsoid texture coordinates: legacy, world_y, or world_y_auto_seam.
+    The world_y modes place texture poles on world Y without altering geometry.
+    Auto seam uses sampled coverage across the entire selected camera sequence."""
+
     is_background_color_learnable: bool = field(default=True)
     """If the background color should be learnable."""
 

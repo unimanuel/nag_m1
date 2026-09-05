@@ -10,6 +10,9 @@ from nag.model.background_image_ellipsoid_scene_node_3d import (
     validate_ellipsoid_matches_config,
 )
 from nag.model.sphere_utils import ray_ellipsoid_intersection
+from nag.model.ellipsoid_texture import (
+    surface_to_uv, uv_to_surface, world_y_texture_rotation, choose_seam_offset,
+)
 from nag.model.view_dependent_background_image_ellipsoid_scene_node_3d import (
     ViewDependentBackgroundImageEllipsoidSceneNode3D,
 )
@@ -261,8 +264,9 @@ def test_ellipsoid_background_declares_curved_not_spherical_protocol():
     "visible_uv_argument",
     ["ellipsoid_visible_uv_texture", "sphere_visible_uv_texture"],
 )
+@pytest.mark.parametrize("texture_mode", ["legacy", "world_y", "world_y_auto_seam"])
 def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
-    tmp_path, base_class, visible_uv_argument
+    tmp_path, base_class, visible_uv_argument, texture_mode
 ):
     geometry_path = tmp_path / "ellipsoid.json"
     _write_geometry(geometry_path)
@@ -284,6 +288,7 @@ def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
         def global_to_image_coordinates(
             self, points, t, v_includes_time, clamp, return_ok
         ):
+            self.texture_surface_points = points
             assert not v_includes_time
             image_points = torch.empty((*points.shape[:-1], 1, 2))
             image_points[..., 0, 0] = 2.5
@@ -312,11 +317,12 @@ def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
         output_path=None,
     )
     world = World()
+    camera = Camera()
 
     visible_uv_kwargs = {visible_uv_argument: {"enabled": True}}
     node = base_class.for_camera.__func__(
         CapturingNode,
-        camera=Camera(),
+        camera=camera,
         images=torch.zeros(5, 3, 4, 6),
         masks=torch.zeros(5, 1, 4, 6),
         depths=torch.zeros(5, 1, 4, 6),
@@ -328,6 +334,7 @@ def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
         color_mask_resolution=[4, 8],
         ellipsoid_path=geometry_path,
         ellipsoid_scale_margin=0.02,
+        ellipsoid_texture_orientation=texture_mode,
         **visible_uv_kwargs,
     )
 
@@ -343,3 +350,66 @@ def test_for_camera_loads_geometry_checks_cameras_and_constructs_oriented_node(
     )
     assert node.constructor_args["initial_rgb"].shape == (3, 4, 8)
     assert node.constructor_args["visible_uv_texture_metadata"]["enabled"]
+
+    # Initialization samples the exact physical surface represented by runtime
+    # texture coordinates, including visible-tile bounds and automatic seam.
+    args = node.constructor_args
+    normalized_local = (camera.texture_surface_points - torch.tensor([1., 2., 3.])) / args["ellipsoid_radii"]
+    recovered_uv = surface_to_uv(normalized_local,
+        texture_rotation=args["ellipsoid_texture_rotation"],
+        u_offset=args["ellipsoid_texture_u_offset"])
+    bounds = args["visible_uv_texture_bounds"]
+    height, width = args["initial_rgb"].shape[-2:]
+    expected_u = torch.remainder(bounds[0] + bounds[1] * (torch.arange(width) + .5) / width, 1.)
+    expected_v = bounds[2] + bounds[3] * (torch.arange(height) + .5) / height
+    assert torch.allclose(recovered_uv[..., 0], expected_u.expand(height, width), atol=1e-5)
+    assert torch.allclose(recovered_uv[..., 1], expected_v[:, None].expand(height, width), atol=1e-5)
+
+
+@pytest.mark.parametrize("node_class", [BackgroundImageEllipsoidSceneNode3D, ViewDependentBackgroundImageEllipsoidSceneNode3D])
+@pytest.mark.parametrize("y_flip", [False, True])
+def test_texture_orientation_preserves_geometry_and_flow_roundtrip(node_class, y_flip):
+    node = node_class.__new__(node_class)
+    torch.nn.Module.__init__(node)
+    radii = torch.tensor([7., 3., 2.])
+    node.register_buffer("ellipsoid_radii", radii)
+    node.sphere_uv_y_flip = y_flip
+    position = _global_position([2., 4., -3.], _rotation_z(27))
+    origins = position[0, :3, 3].expand(4, 1, 3).clone()
+    origins[:, 0, 0] += .1
+    directions = torch.tensor([[[1., 1., 1.]], [[-1., .2, 1.]], [[1., -.3, -1.]], [[.3, 1., 2.]]])
+    points, hit, depths = node.intersect_rays(origins, directions, position)
+    normals = node.get_global_surface_normals(points, position)
+    legacy_uv = node._global_points_to_sphere_uv(points, position)
+    basis = world_y_texture_rotation(position[0, :3, :3], radii)
+    node.register_buffer("ellipsoid_texture_rotation", basis)
+    node.ellipsoid_texture_u_offset = .37
+    new_points, new_hit, new_depths = node.intersect_rays(origins, directions, position)
+    assert torch.equal(points, new_points)
+    assert torch.equal(hit, new_hit)
+    assert torch.equal(depths, new_depths)
+    assert torch.equal(normals, node.get_global_surface_normals(points, position))
+    uv = node._global_points_to_sphere_uv(points, position)
+    assert not torch.allclose(legacy_uv, uv)
+    assert torch.allclose(node._sphere_uv_to_global_points(uv, position), points, atol=3e-6)
+    assert torch.allclose(node.get_flowed_global_points(points, torch.zeros_like(uv), position), points, atol=3e-6)
+    flowed = node.get_flowed_global_points(points, torch.full_like(uv, .02), position)
+    local = ((flowed - position[0, :3, 3]) @ position[0, :3, :3]) / radii
+    assert torch.allclose(local.norm(dim=-1), torch.ones(4, 1), atol=1e-6)
+    # Even with tilted, unequal geometric axes, the texture poles are vertical.
+    polar_world = position[0, :3, :3] @ (radii * basis[:, 1])
+    assert torch.allclose(polar_world / polar_world.norm(), torch.tensor([0., 1., 0.]), atol=1e-6)
+    assert torch.det(basis).item() == pytest.approx(1., abs=1e-6)
+
+
+def test_seam_selection_handles_turn_coverage_and_full_panorama():
+    # Two viewing sectors on either side of the old seam.
+    u = torch.tensor([.96, .97, .99, .01, .04])
+    offset, metadata = choose_seam_offset(u)
+    shifted = torch.remainder(u + offset, 1.)
+    assert metadata["seam_selection"] == "largest_empty_sampled_arc"
+    assert torch.minimum(shifted, 1-shifted).min() > .4
+    panorama = (torch.arange(360) + .5) / 360
+    offset, metadata = choose_seam_offset(panorama)
+    assert metadata["seam_selection"] == "least_occupied_sampled_arc"
+    assert 0 <= offset < 1

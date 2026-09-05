@@ -36,6 +36,8 @@ class ViewDependentBackgroundImageEllipsoidSceneNode3D(
         ellipsoid_radii: VEC_TYPE,
         ellipsoid_source_path: Optional[str] = None,
         ellipsoid_geometry_metadata: Optional[Dict[str, Any]] = None,
+        ellipsoid_texture_rotation: Optional[torch.Tensor] = None,
+        ellipsoid_texture_u_offset: float = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -53,6 +55,11 @@ class ViewDependentBackgroundImageEllipsoidSceneNode3D(
         self.register_buffer("ellipsoid_radii", radii)
         self.ellipsoid_source_path = ellipsoid_source_path
         self.ellipsoid_geometry_metadata = dict(ellipsoid_geometry_metadata or {})
+        if ellipsoid_texture_rotation is not None:
+            self.register_buffer("ellipsoid_texture_rotation", tensorify(
+                ellipsoid_texture_rotation, dtype=self.dtype, device=radii.device
+            ))
+        self.ellipsoid_texture_u_offset = float(ellipsoid_texture_u_offset)
 
     def get_ellipsoid_radii(self) -> torch.Tensor:
         return self.ellipsoid_radii
@@ -165,6 +172,7 @@ class ViewDependentBackgroundImageEllipsoidSceneNode3D(
         ellipsoid_scale_margin: float = 0.02,
         ellipsoid_radii_override: Optional[VEC_TYPE] = None,
         ellipsoid_max_radius: Optional[float] = None,
+        ellipsoid_texture_orientation: str = "legacy",
         **kwargs,
     ):
         return BackgroundImageEllipsoidSceneNode3D.for_camera.__func__(
@@ -195,5 +203,6 @@ class ViewDependentBackgroundImageEllipsoidSceneNode3D(
             ellipsoid_scale_margin=ellipsoid_scale_margin,
             ellipsoid_radii_override=ellipsoid_radii_override,
             ellipsoid_max_radius=ellipsoid_max_radius,
+            ellipsoid_texture_orientation=ellipsoid_texture_orientation,
             **kwargs,
         )

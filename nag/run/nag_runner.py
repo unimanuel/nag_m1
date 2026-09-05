@@ -1539,6 +1539,8 @@ class NAGRunner(TrainableRunner, EpochStateMixin):
                     self.config.background_ellipsoid_radii_override
                 args["ellipsoid_max_radius"] = \
                     self.config.background_ellipsoid_max_radius
+                args["ellipsoid_texture_orientation"] = \
+                    self.config.background_ellipsoid_texture_orientation
             elif self.config.background_ellipsoid_radii_override is not None:
                 raise ValueError(
                     "background_ellipsoid_radii_override can only be used with an "

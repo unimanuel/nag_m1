@@ -15,12 +15,14 @@ from nag.model.background_image_sphere_scene_node_3d import (
     BackgroundImageSphereSceneNode3D,
 )
 from nag.model.sphere_utils import (
-    direction_to_equirect_uv,
-    equirect_uv_to_direction,
     normalize,
     ray_ellipsoid_intersection,
 )
 from nag.model.timed_camera_scene_node_3d import TimedCameraSceneNode3D
+from nag.model.ellipsoid_texture import (
+    surface_to_uv, uv_to_surface, world_y_texture_rotation,
+    choose_seam_offset, uv_diagnostics,
+)
 from nag.model.timed_discrete_scene_node_3d import global_to_local, local_to_global
 from tools.logger.logging import logger
 from tools.model.abstract_scene_node import AbstractSceneNode
@@ -230,6 +232,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         ellipsoid_radii: VEC_TYPE,
         ellipsoid_source_path: Optional[str] = None,
         ellipsoid_geometry_metadata: Optional[Dict[str, Any]] = None,
+        ellipsoid_texture_rotation: Optional[torch.Tensor] = None,
+        ellipsoid_texture_u_offset: float = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -247,6 +251,11 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         self.register_buffer("ellipsoid_radii", radii)
         self.ellipsoid_source_path = ellipsoid_source_path
         self.ellipsoid_geometry_metadata = dict(ellipsoid_geometry_metadata or {})
+        if ellipsoid_texture_rotation is not None:
+            self.register_buffer("ellipsoid_texture_rotation", tensorify(
+                ellipsoid_texture_rotation, dtype=self.dtype, device=radii.device
+            ))
+        self.ellipsoid_texture_u_offset = float(ellipsoid_texture_u_offset)
 
     def get_ellipsoid_radii(self) -> torch.Tensor:
         return self.ellipsoid_radii
@@ -295,8 +304,10 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             dtype=local_points.dtype, device=local_points.device
         )
         unit_sphere_points = local_points / radii
-        return direction_to_equirect_uv(
-            unit_sphere_points, y_flip=self.sphere_uv_y_flip
+        return surface_to_uv(
+            unit_sphere_points, y_flip=self.sphere_uv_y_flip,
+            texture_rotation=getattr(self, "ellipsoid_texture_rotation", None),
+            u_offset=getattr(self, "ellipsoid_texture_u_offset", 0.0),
         )
 
     def _sphere_uv_to_global_points(
@@ -304,8 +315,10 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         uv01: torch.Tensor,
         global_position: torch.Tensor,
     ) -> torch.Tensor:
-        local_directions = equirect_uv_to_direction(
-            uv01, y_flip=self.sphere_uv_y_flip
+        local_directions = uv_to_surface(
+            uv01, y_flip=self.sphere_uv_y_flip,
+            texture_rotation=getattr(self, "ellipsoid_texture_rotation", None),
+            u_offset=getattr(self, "ellipsoid_texture_u_offset", 0.0),
         )
         radii = self.get_ellipsoid_radii().to(
             dtype=uv01.dtype, device=uv01.device
@@ -327,6 +340,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         margin_uv: VEC_TYPE = (0.05, 0.05),
         interior_samples_per_axis: int = 9,
         y_flip: bool = False,
+        texture_rotation: Optional[torch.Tensor] = None,
+        texture_u_offset: float = 0.0,
     ) -> Tuple[Optional[torch.Tensor], Dict[str, Any], int]:
         if len(margin_uv) != 2:
             raise ValueError("margin_uv must contain [u_margin, v_margin].")
@@ -380,8 +395,9 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             local_points = torch.matmul(
                 (surface_points - center).unsqueeze(-2), rotation
             ).squeeze(-2)
-            uv01 = direction_to_equirect_uv(
-                local_points / radii, y_flip=y_flip
+            uv01 = surface_to_uv(
+                local_points / radii, y_flip=y_flip,
+                texture_rotation=texture_rotation, u_offset=texture_u_offset,
             )
             valid = hit & torch.isfinite(uv01).all(dim=-1)
             uv01 = uv01[valid]
@@ -447,6 +463,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         y_flip: bool = False,
         align_corners: bool = True,
         uv_bounds: Optional[torch.Tensor] = None,
+        texture_rotation: Optional[torch.Tensor] = None,
+        texture_u_offset: float = 0.0,
     ) -> torch.Tensor:
         tex_h, tex_w = int(resolution[0]), int(resolution[1])
         if uv_bounds is None:
@@ -463,7 +481,10 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         ) / tex_w
         vv, uu = torch.meshgrid(v, u, indexing="ij")
         texture_uv = torch.stack([uu, vv], dim=-1)
-        unit_directions = equirect_uv_to_direction(texture_uv, y_flip=y_flip)
+        unit_directions = uv_to_surface(
+            texture_uv, y_flip=y_flip, texture_rotation=texture_rotation,
+            u_offset=texture_u_offset,
+        )
         local_points = unit_directions * radii
         surface_points = center.view(1, 1, 3) + torch.matmul(
             local_points, rotation.transpose(-1, -2)
@@ -565,6 +586,7 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         ellipsoid_scale_margin: float = 0.02,
         ellipsoid_radii_override: Optional[VEC_TYPE] = None,
         ellipsoid_max_radius: Optional[float] = None,
+        ellipsoid_texture_orientation: str = "legacy",
         **kwargs,
     ):
         if world is None:
@@ -582,6 +604,45 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
         if config is not None:
             validate_ellipsoid_matches_config(geometry, config)
         center, radii, rotation = geometry.center, geometry.radii, geometry.rotation
+
+        if ellipsoid_texture_orientation not in ("legacy", "world_y", "world_y_auto_seam"):
+            raise ValueError("ellipsoid_texture_orientation must be legacy, world_y, or world_y_auto_seam.")
+        texture_rotation = None
+        texture_u_offset = 0.0
+        texture_metadata = {"mode": ellipsoid_texture_orientation}
+        if ellipsoid_texture_orientation != "legacy":
+            texture_rotation = world_y_texture_rotation(rotation, radii)
+            # Same grid for every sequence, across every selected camera frame.
+            # Use the entire image footprint, so unseen background behind a
+            # foreground mask does not create a misleading 'safe' seam gap.
+            with torch.no_grad():
+                ys = torch.linspace(0, int(camera._image_resolution[0]) - 1, 49, device=times.device, dtype=dtype)
+                xs = torch.linspace(0, int(camera._image_resolution[1]) - 1, 73, device=times.device, dtype=dtype)
+                yy, xx = torch.meshgrid(ys, xs, indexing="ij")
+                pixels = torch.stack((xx.flatten(), yy.flatten()), -1)
+                origins, directions = camera.get_global_rays(uv=pixels, t=times, uv_includes_time=False)
+                points, hit, _ = ray_ellipsoid_intersection(origins, directions, center, radii, rotation)
+                normalized_local = ((points - center) @ rotation) / radii
+                valid = hit & torch.isfinite(normalized_local).all(-1)
+                normalized_local = normalized_local[valid]
+                if not normalized_local.numel():
+                    raise ValueError("No valid camera-ray intersections for texture orientation selection.")
+                legacy_uv = surface_to_uv(normalized_local, y_flip=sphere_uv_y_flip)
+                oriented_uv = surface_to_uv(normalized_local, y_flip=sphere_uv_y_flip, texture_rotation=texture_rotation)
+                if ellipsoid_texture_orientation == "world_y_auto_seam":
+                    texture_u_offset, seam_metadata = choose_seam_offset(oriented_uv[..., 0])
+                    texture_metadata.update(seam_metadata)
+                final_uv = surface_to_uv(normalized_local, y_flip=sphere_uv_y_flip,
+                                         texture_rotation=texture_rotation, u_offset=texture_u_offset)
+                texture_metadata.update({
+                    "normalized_local_to_texture_columns": texture_rotation.cpu().tolist(),
+                    "u_offset": texture_u_offset,
+                    "physical_polar_axis": [0.0, 1.0, 0.0],
+                    "sample_count": len(normalized_local),
+                    "sampling": "73x49 full-image grid per selected frame, independent of masks",
+                    "legacy_mapping": uv_diagnostics(legacy_uv),
+                    "selected_mapping": uv_diagnostics(final_uv),
+                })
 
         camera_positions = camera.get_global_position(t=times)[:, :3, 3].detach().to(dtype)
         camera_local = torch.matmul(camera_positions - center, rotation) / radii
@@ -634,6 +695,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
                     visible_config.get("interior_samples_per_axis", 9)
                 ),
                 y_flip=sphere_uv_y_flip,
+                texture_rotation=texture_rotation,
+                texture_u_offset=texture_u_offset,
             )
             if visible_bounds is None:
                 logger.warning(
@@ -670,6 +733,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
                         else True
                     ),
                     uv_bounds=visible_bounds,
+                    texture_rotation=texture_rotation,
+                    texture_u_offset=texture_u_offset,
                 )
 
         geometry_diagnostic = {
@@ -705,6 +770,7 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             "texture_relative_scale_margin": float(relative_scale_margin),
             "color_mask_resolution": color_mask_resolution,
             "visible_uv_texture": visible_metadata,
+            "texture_orientation": texture_metadata,
         }
         _write_ellipsoid_geometry_diagnostic(config, geometry_diagnostic)
         logger.info(
@@ -746,6 +812,8 @@ class BackgroundImageEllipsoidSceneNode3D(BackgroundImageSphereSceneNode3D):
             ellipsoid_radii=radii,
             ellipsoid_source_path=geometry.source_path,
             ellipsoid_geometry_metadata=geometry_diagnostic,
+            ellipsoid_texture_rotation=texture_rotation,
+            ellipsoid_texture_u_offset=texture_u_offset,
             sphere_uv_y_flip=sphere_uv_y_flip,
             network_dtype=(
                 getattr(config, "tinycudann_network_dtype", torch.float16)
