@@ -27,7 +27,7 @@ SEQUENCES = {
 }
 ROOTS = ['2026-08-19_ellipsoid_non_center', '2026-08-21_missing_ego',
          '2026-08-20_ellipsoid_center_clipped', '2026-09-02_depth_proxy_v4',
-         '2026-09-06_seams_compare_test']
+         '2026-09-06_seams_compare_test', '2026-09-12_regular_sphere']
 
 
 def jsonable(x):

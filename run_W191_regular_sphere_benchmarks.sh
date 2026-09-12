@@ -10,15 +10,13 @@
 #   bash run_W191_regular_sphere_benchmarks.sh
 #   DRY_RUN=1 bash run_W191_regular_sphere_benchmarks.sh
 #
-# After completion, add the date directory printed at the end to
-# PARALLAX_EXTRA_RUN_ROOTS when running the parallax diagnostics.
+# The completed benchmark location is built into the parallax inventory.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 DRY_RUN="${DRY_RUN:-0}"
-RUN_DATE="${RUN_DATE:-$(date +%F)}"
 CONFIG_ROOT="$REPO_ROOT/config/waymo/large-ego"
 SEGMENT_ID="1918764220984209654"
 
@@ -67,5 +65,5 @@ for interval in "${intervals[@]}"; do
     fi
 done
 
-printf '\nCompleted W191 regular-sphere jobs (DRY_RUN=%s). Expected run folder: runs/%s\n' "$DRY_RUN" "$RUN_DATE"
-printf 'For parallax diagnostics after completion: PARALLAX_EXTRA_RUN_ROOTS=%q ...\n' "$RUN_DATE"
+printf '\nCompleted W191 regular-sphere jobs (DRY_RUN=%s).\n' "$DRY_RUN"
+printf 'The diagnostics automatically discover results stored in runs/2026-09-12_regular_sphere.\n'

@@ -41,27 +41,28 @@ has no regular-sphere baseline for W191. It is reported as missing; Sphere UV
 is never substituted for a regular-sphere comparison. All available runs get
 absolute spatial metrics, even where a matching sphere comparison is missing.
 
-When a new benchmark is written beneath a later `runs/YYYY-MM-DD` directory,
-include that directory without changing source code. For the missing W191
-regular-sphere runs, first execute:
+The completed W191 regular-sphere runs in `runs/2026-09-12_regular_sphere`
+are included in the built-in inventory. No extra environment setting is needed.
+For a future benchmark written beneath a different run directory, include that
+directory without changing source code. The runner for the W191 regular-sphere
+set is:
 
 ```bash
 bash run_W191_regular_sphere_benchmarks.sh
 ```
 
-Then include its dated output directory when rerunning the diagnostic stages:
+For a future directory, include it when rerunning the diagnostic stages:
 
 ```bash
-export PARALLAX_EXTRA_RUN_ROOTS="2026-09-12"
+export PARALLAX_EXTRA_RUN_ROOTS="2026-09-12_some_future_benchmark"
 bash prepare_ego_parallax_diagnostics.sh
 bash evaluate_ego_parallax_diagnostics.sh
 bash export_ego_spatial_error_comparison.sh
 bash summarize_ego_parallax_diagnostics.sh
 ```
 
-Replace `2026-09-12` with the actual date folder printed by the runner if the
-runs are launched on another date. The inventory rejects duplicate matching
-run names, preventing an old and new baseline from being silently mixed.
+The inventory rejects duplicate matching run names, preventing an old and new
+baseline from being silently mixed.
 
 ## Controls and resumability
 

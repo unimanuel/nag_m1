@@ -144,6 +144,7 @@ class ParallaxDiagnosticsTests(unittest.TestCase):
 
     def test_extra_run_root_is_additive(self):
         self.assertIn('2026-08-19_ellipsoid_non_center', ROOTS)
+        self.assertIn('2026-09-12_regular_sphere', ROOTS)
         # The CLI passes roots through to inventory; avoid a filesystem fixture
         # here because inventory deliberately validates complete saved runs.
         import inspect
