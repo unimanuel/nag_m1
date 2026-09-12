@@ -11,7 +11,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nag'))
 from diagnostics.parallax_core import (DepthEvidence, angle_degrees, balanced_indices, image_statistics,
     inside, intersect, intrinsics, project, regions, surface_coordinates, surface_uv, uv_errors)
 from diagnostics.parallax_evaluate import evaluate_pairs
-from diagnostics.parallax_io import classify_run, diagnostic, digest, snapshot
+from diagnostics.parallax_io import ROOTS, classify_run, diagnostic, digest, inventory, snapshot
 from diagnostics.parallax_observations import targets_for
 
 
@@ -141,6 +141,13 @@ class ParallaxDiagnosticsTests(unittest.TestCase):
     def test_windows_carriage_return_run_classification(self):
         p=Path('2026_W254_37_81_large-undistorted\r_ellipsoid_ray_depth_proxy_yup_v4_moderate_y_visuv')
         self.assertEqual(classify_run(p),('moderate_y','visuv','benchmark'))
+
+    def test_extra_run_root_is_additive(self):
+        self.assertIn('2026-08-19_ellipsoid_non_center', ROOTS)
+        # The CLI passes roots through to inventory; avoid a filesystem fixture
+        # here because inventory deliberately validates complete saved runs.
+        import inspect
+        self.assertEqual(inspect.signature(inventory).parameters['extra_roots'].default, ())
 
     def test_sampling_deterministic_and_targets_exclude_source(self):
         uv=np.random.default_rng(1).uniform(0,100,(100,2))

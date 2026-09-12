@@ -12,6 +12,10 @@ fi
 [[ "${DRY_RUN:-0}" == 1 ]] && args+=(--dry-run)
 [[ "${FORCE:-0}" == 1 ]] && args+=(--force)
 [[ -n "${OUTPUT_ROOT:-}" ]] && args+=(--output "$OUTPUT_ROOT")
+if [[ -n "${PARALLAX_EXTRA_RUN_ROOTS:-}" ]]; then
+    read -r -a extra_roots <<< "${PARALLAX_EXTRA_RUN_ROOTS}"
+    args+=(--extra-run-roots "${extra_roots[@]}")
+fi
 [[ -n "${RAYS_PER_FRAME:-}" ]] && args+=(--rays-per-frame "$RAYS_PER_FRAME")
 [[ -n "${TARGETS_PER_FRAME:-}" ]] && args+=(--targets-per-frame "$TARGETS_PER_FRAME")
 [[ -n "${FRAME_LIMIT:-}" ]] && args+=(--frame-limit "$FRAME_LIMIT")

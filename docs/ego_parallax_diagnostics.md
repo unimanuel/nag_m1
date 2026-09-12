@@ -41,6 +41,28 @@ has no regular-sphere baseline for W191. It is reported as missing; Sphere UV
 is never substituted for a regular-sphere comparison. All available runs get
 absolute spatial metrics, even where a matching sphere comparison is missing.
 
+When a new benchmark is written beneath a later `runs/YYYY-MM-DD` directory,
+include that directory without changing source code. For the missing W191
+regular-sphere runs, first execute:
+
+```bash
+bash run_W191_regular_sphere_benchmarks.sh
+```
+
+Then include its dated output directory when rerunning the diagnostic stages:
+
+```bash
+export PARALLAX_EXTRA_RUN_ROOTS="2026-09-12"
+bash prepare_ego_parallax_diagnostics.sh
+bash evaluate_ego_parallax_diagnostics.sh
+bash export_ego_spatial_error_comparison.sh
+bash summarize_ego_parallax_diagnostics.sh
+```
+
+Replace `2026-09-12` with the actual date folder printed by the runner if the
+runs are launched on another date. The inventory rejects duplicate matching
+run names, preventing an old and new baseline from being silently mixed.
+
 ## Controls and resumability
 
 All wrappers accept extra Python options; use `--help` for the complete list.
@@ -51,6 +73,7 @@ Common environment variables:
 | `PYTHON_BIN` | `python3` | Interpreter from the active environment |
 | `SEQUENCES` | all seven | Space-separated interval labels |
 | `OUTPUT_ROOT` | `/mnt/d/CGProjectData/waymo/diagnostics/parallax_v1` | Output and cache root |
+| `PARALLAX_EXTRA_RUN_ROOTS` | empty | Space-separated additional `runs/` folders to inventory |
 | `RAYS_PER_FRAME` | 256 | Spatially balanced source samples |
 | `TARGETS_PER_FRAME` | 8 | Nearby/distant/turning target-frame candidates |
 | `FRAME_LIMIT` | 0 (all) | Evenly spaced smoke-test frames only |

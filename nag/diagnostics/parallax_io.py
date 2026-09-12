@@ -114,9 +114,14 @@ def classify_run(path):
     return None
 
 
-def inventory(repo, labels, data_root):
+def inventory(repo, labels, data_root, extra_roots=()):
     runs, missing = [], []
-    for folder in ROOTS:
+    roots = list(ROOTS)
+    for root in extra_roots:
+        root = str(root)
+        if root not in roots:
+            roots.append(root)
+    for folder in roots:
         root = repo/'runs'/folder
         if not root.is_dir():
             continue

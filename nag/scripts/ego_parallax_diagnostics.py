@@ -20,6 +20,8 @@ def main():
     p.add_argument('--output',type=Path,default=Path('/mnt/d/CGProjectData/waymo/diagnostics/parallax_v1'))
     p.add_argument('--data-root',type=Path,default=REPO/'data/datasets/waymo')
     p.add_argument('--cloud-root',type=Path,default=Path('/mnt/d/CGProjectData/waymo/pointclouds'))
+    p.add_argument('--extra-run-roots',nargs='*',default=[],
+                   help='Additional subdirectories of runs/ to inventory, e.g. 2026-09-12')
     p.add_argument('--dry-run',action='store_true')
     p.add_argument('--force',action='store_true')
     p.add_argument('--rays-per-frame',type=int,default=256)
@@ -37,7 +39,7 @@ def main():
         args.visibility_radius<=0 or args.depth_absolute<0 or args.depth_relative<0 or
         args.alignment_p90_limit<=0 or args.boundary_width<1 or not 0<args.display_cap<=1):
         p.error('Invalid sampling, tolerance, frame-limit, boundary-width, or display-cap value')
-    inv=inventory(REPO,args.sequences,args.data_root)
+    inv=inventory(REPO,args.sequences,args.data_root,args.extra_run_roots)
     if args.dry_run:
         for label in args.sequences:
             runs=[r for r in inv['runs'] if r['sequence']==label]
