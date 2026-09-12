@@ -16,6 +16,14 @@ if [[ -n "${PARALLAX_EXTRA_RUN_ROOTS:-}" ]]; then
     read -r -a extra_roots <<< "${PARALLAX_EXTRA_RUN_ROOTS}"
     args+=(--extra-run-roots "${extra_roots[@]}")
 fi
+if [[ -n "${PARALLAX_FAMILIES:-}" ]]; then
+    read -r -a families <<< "${PARALLAX_FAMILIES}"
+    args+=(--families "${families[@]}")
+fi
+if [[ -n "${PARALLAX_COHORTS:-}" ]]; then
+    read -r -a cohorts <<< "${PARALLAX_COHORTS}"
+    args+=(--cohorts "${cohorts[@]}")
+fi
 [[ -n "${RAYS_PER_FRAME:-}" ]] && args+=(--rays-per-frame "$RAYS_PER_FRAME")
 [[ -n "${TARGETS_PER_FRAME:-}" ]] && args+=(--targets-per-frame "$TARGETS_PER_FRAME")
 [[ -n "${FRAME_LIMIT:-}" ]] && args+=(--frame-limit "$FRAME_LIMIT")

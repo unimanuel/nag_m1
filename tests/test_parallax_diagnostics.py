@@ -13,6 +13,7 @@ from diagnostics.parallax_core import (DepthEvidence, angle_degrees, balanced_in
 from diagnostics.parallax_evaluate import evaluate_pairs
 from diagnostics.parallax_io import ROOTS, classify_run, diagnostic, digest, inventory, snapshot
 from diagnostics.parallax_observations import targets_for
+from diagnostics.parallax_spatial import spatial_comparisons
 
 
 def geometry(radii=(10,10,10)):
@@ -145,6 +146,20 @@ class ParallaxDiagnosticsTests(unittest.TestCase):
     def test_reprojection_depth_run_classification(self):
         p=Path('2026_W254_37_81_large-undistorted_ellipsoid_reprojection_depth_v1_visuv')
         self.assertEqual(classify_run(p),('reprojection_v1','visuv','benchmark'))
+
+    def test_reprojection_spatial_comparisons_include_direct_geometry_references(self):
+        def run(family, mode):
+            return {'id': f'{family}_{mode}_benchmark', 'family': family,
+                    'mode': mode, 'cohort': 'benchmark'}
+        runs = [run(family, mode) for mode in ('regular', 'visuv')
+                for family in ('sphere', 'raw_v4', 'moderate_y', 'reprojection_v1')]
+        comparisons, missing = spatial_comparisons(runs)
+        self.assertEqual(missing, [])
+        for mode in ('regular', 'visuv'):
+            candidate = f'reprojection_v1_{mode}_benchmark'
+            self.assertIn((candidate, f'sphere_{mode}_benchmark'), comparisons)
+            self.assertIn((candidate, f'moderate_y_{mode}_benchmark'), comparisons)
+            self.assertIn((candidate, f'raw_v4_{mode}_benchmark'), comparisons)
 
     def test_extra_run_root_is_additive(self):
         self.assertIn('2026-08-19_ellipsoid_non_center', ROOTS)

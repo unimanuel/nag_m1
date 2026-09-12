@@ -22,6 +22,12 @@ def main():
     p.add_argument('--cloud-root',type=Path,default=Path('/mnt/d/CGProjectData/waymo/pointclouds'))
     p.add_argument('--extra-run-roots',nargs='*',default=[],
                    help='Additional subdirectories of runs/ to inventory, e.g. 2026-09-12')
+    p.add_argument('--families',nargs='+',
+                   choices=['sphere','ar3','raw_v4','moderate_y','reprojection_v1'],
+                   help='Restrict the experiment inventory to background families after validation.')
+    p.add_argument('--cohorts',nargs='+',
+                   choices=['benchmark','seam_legacy','seam_world_y','seam_world_y_auto_seam'],
+                   help='Restrict the experiment inventory to comparison cohorts after validation.')
     p.add_argument('--dry-run',action='store_true')
     p.add_argument('--force',action='store_true')
     p.add_argument('--rays-per-frame',type=int,default=256)
@@ -40,6 +46,13 @@ def main():
         args.alignment_p90_limit<=0 or args.boundary_width<1 or not 0<args.display_cap<=1):
         p.error('Invalid sampling, tolerance, frame-limit, boundary-width, or display-cap value')
     inv=inventory(REPO,args.sequences,args.data_root,args.extra_run_roots)
+    if args.families:
+        requested=set(args.families)
+        inv['runs']=[run for run in inv['runs'] if run['family'] in requested]
+        inv['missing']=[item for item in inv['missing'] if item['family'] in requested]
+    if args.cohorts:
+        requested=set(args.cohorts)
+        inv['runs']=[run for run in inv['runs'] if run['cohort'] in requested]
     if args.dry_run:
         for label in args.sequences:
             runs=[r for r in inv['runs'] if r['sequence']==label]

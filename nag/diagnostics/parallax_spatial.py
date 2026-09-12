@@ -1,4 +1,4 @@
-"""Spatial MAE comparisons from saved renders, independent of pixel_error folders."""
+"""Spatial MAE comparisons from saved renders, independent of pixel-error folders."""
 from __future__ import annotations
 
 import json
@@ -10,6 +10,48 @@ from PIL import Image, ImageDraw
 from .parallax_core import image_statistics, regions, signed_error_rgb
 from .parallax_io import (SEQUENCES, code_signature, digest, load_mask, mask_paths,
                           snapshot, write_csv, write_json)
+
+
+def spatial_comparisons(runs):
+    """Return signed-image comparisons and explicitly missing counterparts.
+
+    Every benchmark ellipsoid is compared with the same-layout sphere.  The
+    constrained reprojection/depth candidate also has direct comparisons to
+    Moderate-Y and raw v4 in the same layout.  Those latter two comparisons
+    answer the specific geometric question without making either an implicit
+    reference or depending on the order in which experiments were run.
+    """
+    comparisons = []
+    missing = []
+
+    def matching(candidate, family):
+        return next((reference for reference in runs
+                     if reference['family'] == family
+                     and reference['mode'] == candidate['mode']
+                     and reference['cohort'] == 'benchmark'), None)
+
+    def add(candidate, reference, description):
+        if reference is None:
+            missing.append({'run': candidate['id'], 'reason': description})
+            return
+        pair = (candidate['id'], reference['id'])
+        if pair not in comparisons:
+            comparisons.append(pair)
+
+    for run in runs:
+        if run['cohort'] == 'benchmark' and run['family'] != 'sphere':
+            add(run, matching(run, 'sphere'),
+                'matching regular/Visible-UV sphere baseline absent')
+            if run['family'] == 'reprojection_v1':
+                add(run, matching(run, 'moderate_y'),
+                    'matching regular/Visible-UV Moderate-Y baseline absent')
+                add(run, matching(run, 'raw_v4'),
+                    'matching regular/Visible-UV raw-v4 baseline absent')
+        elif run['cohort'].startswith('seam_') and run['cohort'] != 'seam_legacy':
+            add(run, next((reference for reference in runs
+                           if reference['cohort'] == 'seam_legacy'), None),
+                'legacy texture-orientation baseline absent')
+    return comparisons, missing
 
 
 def spatial_inputs(args,runs,label,frames):
@@ -57,16 +99,7 @@ def spatial_sequence(args,inv,label):
     out.mkdir(parents=True,exist_ok=True)
     data_dir=args.data_root/f'segment-{SEQUENCES[label][0]}'
     size=tuple(runs[0]['size'])
-    comparisons=[];missing=[]
-    for run in runs:
-        if run['cohort']=='benchmark' and run['family']!='sphere':
-            reference=next((r for r in runs if r['family']=='sphere' and r['mode']==run['mode'] and r['cohort']=='benchmark'),None)
-            if reference:
-                comparisons.append((run['id'],reference['id']))
-            else:missing.append({'run':run['id'],'reason':'matching regular/Visible-UV sphere baseline absent'})
-        elif run['cohort'].startswith('seam_') and run['cohort']!='seam_legacy':
-            reference=next(r for r in runs if r['cohort']=='seam_legacy')
-            comparisons.append((run['id'],reference['id']))
+    comparisons, missing = spatial_comparisons(runs)
     totals={(r['id'],region):[0,0.,0.] for r in runs for region in ('all','background','foreground','boundary')}
     rows=[];difference_rows=[]
     for frame in frames:
