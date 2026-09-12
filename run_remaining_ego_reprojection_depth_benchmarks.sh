@@ -66,7 +66,8 @@ assert fit.get('regularizer_version', 'original') == 'original'
 assert (document['frame_slice']['start'], document['frame_slice']['stop'], document['frame_slice']['step']) == (int(first), int(last) + 1, 1)
 assert all(math.isfinite(value) and value > 0 for value in fit['radii'])
 assert fit['conservative_minimum_camera_surface_distance'] >= fit['target_minimum_camera_surface_distance'] - 1e-6
-print(f'{document["label"]}: center={fit["center"]}, radii={fit["radii"]}, clearance={fit["conservative_minimum_camera_surface_distance"]:.3f}m')
+label = document.get('label', f"segment-{segment} frames {first}-{last}")
+print(f'{label}: center={fit["center"]}, radii={fit["radii"]}, clearance={fit["conservative_minimum_camera_surface_distance"]:.3f}m')
 PY
 
   for mode in regular visuv; do
