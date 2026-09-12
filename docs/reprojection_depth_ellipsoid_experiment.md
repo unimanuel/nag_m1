@@ -107,3 +107,32 @@ After they finish, put the date-named output directory into
 `PARALLAX_EXTRA_RUN_ROOTS` and rerun the usual four diagnostic stages. The
 inventory recognizes these names as `reprojection_v1`, so their fixed geometry
 and rendered spatial errors will be compared against the matching spheres.
+
+## Held-out ego validation
+
+After the initial controlled trial, the same v1 fit can be tested without
+changing its objective on the five remaining large-ego intervals: W191 0--40,
+40--128, and 128--198; plus W254 0--37 and 139--195.  These are a
+generalization benchmark, not a new geometry variant: every interval retains
+its raw-v4 road-aligned orientation and uses the exact same 24,000-pair / 14,000
+depth-ray budget and safety constraints above.
+
+Prepare and inspect the five new geometry folders first:
+
+```bash
+DRY_RUN=1 bash prepare_remaining_ego_reprojection_depth_ellipsoids.sh
+bash prepare_remaining_ego_reprojection_depth_ellipsoids.sh
+```
+
+Then run the ten held-out training jobs—regular and Visible-UV for every
+interval:
+
+```bash
+DRY_RUN=1 bash run_remaining_ego_reprojection_depth_benchmarks.sh
+bash run_remaining_ego_reprojection_depth_benchmarks.sh
+```
+
+The runner refuses to train if any source YAML or generated v1 JSON is absent,
+has an unexpected interval, or violates the saved conservative camera-clearance
+guard.  It does not overwrite existing result directories; normal NAG
+date-stamped output behavior still applies.
