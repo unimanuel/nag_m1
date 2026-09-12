@@ -142,6 +142,10 @@ class ParallaxDiagnosticsTests(unittest.TestCase):
         p=Path('2026_W254_37_81_large-undistorted\r_ellipsoid_ray_depth_proxy_yup_v4_moderate_y_visuv')
         self.assertEqual(classify_run(p),('moderate_y','visuv','benchmark'))
 
+    def test_reprojection_depth_run_classification(self):
+        p=Path('2026_W254_37_81_large-undistorted_ellipsoid_reprojection_depth_v1_visuv')
+        self.assertEqual(classify_run(p),('reprojection_v1','visuv','benchmark'))
+
     def test_extra_run_root_is_additive(self):
         self.assertIn('2026-08-19_ellipsoid_non_center', ROOTS)
         self.assertIn('2026-09-12_regular_sphere', ROOTS)

@@ -64,6 +64,11 @@ bash summarize_ego_parallax_diagnostics.sh
 The inventory rejects duplicate matching run names, preventing an old and new
 baseline from being silently mixed.
 
+The constrained reprojection/depth experiment is documented separately in
+[reprojection_depth_ellipsoid_experiment.md](reprojection_depth_ellipsoid_experiment.md).
+Its runs are recognized as the `reprojection_v1` family when their completed
+date directory is supplied through `PARALLAX_EXTRA_RUN_ROOTS`.
+
 ## Controls and resumability
 
 All wrappers accept extra Python options; use `--help` for the complete list.

@@ -101,6 +101,8 @@ def classify_run(path):
         return 'moderate_y', 'regular', 'seam_'+mapping
     uv = name.endswith('_visuv')
     base = name[:-6] if uv else name
+    if base.endswith('_ellipsoid_reprojection_depth_v1'):
+        return 'reprojection_v1', 'visuv' if uv else 'regular', 'benchmark'
     if base.endswith('_ellipsoid_ray_depth_proxy_yup_v4_moderate_y'):
         return 'moderate_y', 'visuv' if uv else 'regular', 'benchmark'
     if base.endswith('_ellipsoid_ray_depth_proxy_yup_v4'):
