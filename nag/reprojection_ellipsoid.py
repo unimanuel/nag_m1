@@ -19,7 +19,7 @@ from diagnostics.parallax_core import angle_degrees, intersect, unit
 
 @dataclass(frozen=True)
 class ReprojectionFitConfig:
-    """Fixed, conservative settings for the first combined-fit experiment."""
+    """Settings for original or source-scale-regularized combined-fit experiments."""
 
     max_pairs: int = 24000
     max_depth_rays: int = 14000
@@ -28,6 +28,8 @@ class ReprojectionFitConfig:
     depth_weight: float = 0.15
     reprojection_huber_px: float = 8.0
     depth_huber_log: float = 0.20
+    radius_excess_weight: float = 0.0
+    radius_excess_huber_log: float = 0.20
     max_camera_normalized_radius: float = 0.65
     minimum_camera_surface_distance: float = 6.0
     minimum_axis_radius: float = 8.0
@@ -170,6 +172,29 @@ def _depth_residuals(pairs: Mapping[str, np.ndarray], geometry: Mapping[str, Any
     return {"log_depth_error": residual, "valid": valid}
 
 
+def _radius_excess_log(geometry: Mapping[str, Any], reference_max_axis_radius: float) -> np.ndarray:
+    """Non-negative log excess above a source-derived global radius scale.
+
+    The reference is the largest radius of the safety-projected raw-v4
+    initializer.  It is deliberately *not* an axis-wise prior: an ellipsoid
+    may freely redistribute its size between forward, vertical, and lateral
+    axes.  The term only rejects an axis becoming globally much larger than
+    the conservative source geometry, a failure mode that symmetric
+    reprojection leaves weakly determined on near-straight intervals.
+    """
+
+    if not np.isfinite(reference_max_axis_radius) or reference_max_axis_radius <= 0.0:
+        raise ValueError("reference_max_axis_radius must be finite and positive.")
+    radii = _array_geometry(geometry)["radii"]
+    return np.maximum(0.0, np.log(radii / reference_max_axis_radius))
+
+
+def regularizer_version(config: ReprojectionFitConfig) -> str:
+    """Stable user-facing name for the fitted objective variant."""
+
+    return "new_radius_scale" if config.radius_excess_weight > 0.0 else "original"
+
+
 def _finite_distribution(values: np.ndarray) -> Dict[str, float | int | None]:
     values = np.asarray(values, dtype=np.float64)
     finite = values[np.isfinite(values)]
@@ -190,6 +215,7 @@ def evaluate_geometry(
     pair_indices: np.ndarray,
     source_indices: np.ndarray,
     config: ReprojectionFitConfig,
+    reference_max_axis_radius: float | None = None,
 ) -> Dict[str, Any]:
     """Measure the actual terms and safety state of a candidate geometry."""
 
@@ -208,6 +234,9 @@ def evaluate_geometry(
         if depth_valid.any()
         else float("inf")
     )
+    reference = float(geometry["radii"].max()) if reference_max_axis_radius is None else reference_max_axis_radius
+    radius_excess = _radius_excess_log(geometry, reference)
+    radius_excess_loss = float(_huber(radius_excess, config.radius_excess_huber_log).mean())
     safety = _camera_safety(geometry, np.asarray(pairs["poses"], dtype=np.float64))
     return {
         "geometry": {key: value.tolist() for key, value in geometry.items()},
@@ -218,8 +247,13 @@ def evaluate_geometry(
         "valid_depth_fraction": float(depth_valid.mean()),
         "reprojection_huber_loss": reprojection_loss,
         "depth_huber_loss": depth_loss,
+        "radius_reference_max_axis_radius_m": reference,
+        "radius_excess_log": _finite_distribution(radius_excess),
+        "radius_excess_huber_loss": radius_excess_loss,
         "weighted_data_loss": float(
-            config.reprojection_weight * reprojection_loss + config.depth_weight * depth_loss
+            config.reprojection_weight * reprojection_loss
+            + config.depth_weight * depth_loss
+            + config.radius_excess_weight * radius_excess_loss
         ),
         **safety,
     }
@@ -248,8 +282,9 @@ def fit_reprojection_depth_ellipsoid(
         raise ValueError("minimum camera clearance and axis radius must be positive.")
     if config.max_axis_ratio < 1.0:
         raise ValueError("max_axis_ratio must be at least one.")
-    if min(config.reprojection_weight, config.depth_weight, config.reprojection_huber_px, config.depth_huber_log) <= 0.0:
-        raise ValueError("Weights and Huber thresholds must be positive.")
+    if min(config.reprojection_weight, config.depth_weight, config.reprojection_huber_px,
+           config.depth_huber_log, config.radius_excess_huber_log) <= 0.0 or config.radius_excess_weight < 0.0:
+        raise ValueError("Weights and Huber thresholds must be non-negative with positive active thresholds.")
 
     required = {"points", "source", "target", "visibility", "poses", "intrinsics", "source_points", "source_ids"}
     missing = sorted(required.difference(pairs))
@@ -262,6 +297,7 @@ def fit_reprojection_depth_ellipsoid(
     source_indices = _sample_indices(len(pairs["source_points"]), config.max_depth_rays, config.seed + 1)
     poses = np.asarray(pairs["poses"], dtype=np.float64)
     initial = enforce_safety(initial_geometry, poses, config)
+    reference_max_axis_radius = float(initial["radii"].max())
     rotation = initial["rotation"]
     camera_mean = poses[:, :3, 3].mean(axis=0)
 
@@ -284,6 +320,9 @@ def fit_reprojection_depth_ellipsoid(
             return 1e9
         reprojection = float(_huber(pair["pixel_error"][pair_valid], config.reprojection_huber_px).mean())
         ray_depth = float(_huber(depth["log_depth_error"][depth_valid], config.depth_huber_log).mean())
+        radius_excess_loss = float(_huber(
+            _radius_excess_log(geometry, reference_max_axis_radius), config.radius_excess_huber_log
+        ).mean())
         safety = _camera_safety(geometry, poses)
         ratio_penalty = max(0.0, np.log(safety["maximum_axis_ratio"] / config.max_axis_ratio))
         penalty = (
@@ -293,7 +332,12 @@ def fit_reprojection_depth_ellipsoid(
             + 5e2 * ratio_penalty**2
             + 1e5 * (invalid_pair_fraction + invalid_depth_fraction)
         )
-        return config.reprojection_weight * reprojection + config.depth_weight * ray_depth + penalty
+        return (
+            config.reprojection_weight * reprojection
+            + config.depth_weight * ray_depth
+            + config.radius_excess_weight * radius_excess_loss
+            + penalty
+        )
 
     initial_offset = (initial["center"] - camera_mean) @ rotation
     starts = []
@@ -326,8 +370,12 @@ def fit_reprojection_depth_ellipsoid(
     best = min(candidates, key=lambda item: item["post_projection_objective"])
     final = best["geometry"]
     diagnostics = {
-        "initial_safety_projected": evaluate_geometry(pairs, initial, pair_indices, source_indices, config),
-        "final": evaluate_geometry(pairs, final, pair_indices, source_indices, config),
+        "initial_safety_projected": evaluate_geometry(
+            pairs, initial, pair_indices, source_indices, config, reference_max_axis_radius,
+        ),
+        "final": evaluate_geometry(
+            pairs, final, pair_indices, source_indices, config, reference_max_axis_radius,
+        ),
     }
     candidate_summary = []
     for index, candidate in enumerate(candidates):
@@ -346,6 +394,8 @@ def fit_reprojection_depth_ellipsoid(
         "config": asdict(config),
         "optimization_pair_count": int(len(pair_indices)),
         "optimization_depth_ray_count": int(len(source_indices)),
+        "regularizer_version": regularizer_version(config),
+        "reference_max_axis_radius_m": reference_max_axis_radius,
         "initial_geometry": initial,
         "diagnostics": diagnostics,
         "candidates": candidate_summary,

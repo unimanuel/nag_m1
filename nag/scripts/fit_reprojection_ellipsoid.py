@@ -108,8 +108,10 @@ def _document(
         "mode": "reprojection_depth_proxy",
         "method": (
             "fixed-road-orientation, symmetric cross-frame reprojection ellipsoid "
-            "with weak log-depth anchor and safety-constrained radii"
+            "with weak log-depth anchor, optional source-scale radius-excess regularizer, "
+            "and safety-constrained radii"
         ),
+        "regularizer_version": fit["regularizer_version"],
         "uses_all_selected_points": False,
         "is_minimum_volume": False,
         "center": geometry["center"],
@@ -130,6 +132,9 @@ def _document(
         "actual_axis_ratio": metrics["maximum_axis_ratio"],
         "reprojection_weight": fit["config"]["reprojection_weight"],
         "depth_weight": fit["config"]["depth_weight"],
+        "radius_excess_weight": fit["config"]["radius_excess_weight"],
+        "radius_excess_huber_log": fit["config"]["radius_excess_huber_log"],
+        "radius_excess_reference_max_axis_radius_m": fit["reference_max_axis_radius_m"],
         "reprojection_huber_px": fit["config"]["reprojection_huber_px"],
         "depth_huber_log": fit["config"]["depth_huber_log"],
     }
@@ -141,6 +146,7 @@ def _document(
         "optimization_pair_count": fit["optimization_pair_count"],
         "optimization_depth_ray_count": fit["optimization_depth_ray_count"],
         "config": fit["config"],
+        "regularizer_version": fit["regularizer_version"],
         "initial_safety_projected_metrics": initial,
         "final_metrics": metrics,
         "candidates": fit["candidates"],
@@ -177,6 +183,7 @@ def _write_diagnostics(output_dir: Path, fit: dict[str, Any], label: str, source
         "optimization_pair_count": fit["optimization_pair_count"],
         "optimization_depth_ray_count": fit["optimization_depth_ray_count"],
         "config": fit["config"],
+        "regularizer_version": fit["regularizer_version"],
         "initial_safety_projected": fit["diagnostics"]["initial_safety_projected"],
         "final": fit["diagnostics"]["final"],
         "candidates": fit["candidates"],
@@ -188,7 +195,8 @@ def _write_diagnostics(output_dir: Path, fit: dict[str, Any], label: str, source
     _write_json(output_dir / "reprojection_fit_diagnostics.json", diagnostics)
     fields = (
         "candidate", "pixel_error_median_px", "pixel_error_p90_px", "camera_angle_median_deg",
-        "absolute_log_depth_median", "reprojection_huber_loss", "depth_huber_loss",
+        "absolute_log_depth_median", "radius_excess_log_p95",
+        "reprojection_huber_loss", "depth_huber_loss", "radius_excess_huber_loss",
         "weighted_data_loss", "valid_pair_fraction", "max_camera_normalized_radius",
         "conservative_camera_clearance_m", "minimum_axis_radius_m", "maximum_axis_ratio",
     )
@@ -200,8 +208,10 @@ def _write_diagnostics(output_dir: Path, fit: dict[str, Any], label: str, source
             "pixel_error_p90_px": metrics["pixel_error"]["p90"],
             "camera_angle_median_deg": metrics["camera_angle_deg"]["median"],
             "absolute_log_depth_median": metrics["absolute_log_depth_error"]["median"],
+            "radius_excess_log_p95": metrics["radius_excess_log"]["p95"],
             "reprojection_huber_loss": metrics["reprojection_huber_loss"],
             "depth_huber_loss": metrics["depth_huber_loss"],
+            "radius_excess_huber_loss": metrics["radius_excess_huber_loss"],
             "weighted_data_loss": metrics["weighted_data_loss"],
             "valid_pair_fraction": metrics["valid_pair_fraction"],
             "max_camera_normalized_radius": metrics["max_camera_normalized_radius"],
@@ -229,6 +239,20 @@ def main() -> None:
     parser.add_argument("--max-axis-ratio", type=float, default=10.0)
     parser.add_argument("--reprojection-weight", type=float, default=1.0)
     parser.add_argument("--depth-weight", type=float, default=0.15)
+    parser.add_argument(
+        "--radius-excess-weight", type=float, default=0.0,
+        help=(
+            "Weight for the new source-scale radius-excess regularizer; 0 preserves "
+            "the original objective exactly."
+        ),
+    )
+    parser.add_argument(
+        "--radius-excess-huber-log", type=float, default=0.20,
+        help=(
+            "Huber transition in log(radius/reference-scale) for the new regularizer. "
+            "The reference is the largest safety-projected raw-v4 radius."
+        ),
+    )
     parser.add_argument("--max-iterations", type=int, default=200)
     parser.add_argument("--seed", type=int, default=20260912)
     parser.add_argument("--overwrite", action="store_true")
@@ -251,6 +275,8 @@ def main() -> None:
         seed=args.seed,
         reprojection_weight=args.reprojection_weight,
         depth_weight=args.depth_weight,
+        radius_excess_weight=args.radius_excess_weight,
+        radius_excess_huber_log=args.radius_excess_huber_log,
         max_camera_normalized_radius=args.max_camera_normalized_radius,
         minimum_camera_surface_distance=args.minimum_camera_surface_distance,
         minimum_axis_radius=args.minimum_axis_radius,
@@ -278,7 +304,8 @@ def main() -> None:
         f"{args.label}: median reprojection={final['pixel_error']['median']:.3f}px, "
         f"P90={final['pixel_error']['p90']:.3f}px, "
         f"clearance={final['conservative_camera_clearance_m']:.3f}m, "
-        f"axis ratio={final['maximum_axis_ratio']:.3f}"
+        f"axis ratio={final['maximum_axis_ratio']:.3f}, "
+        f"regularizer={fit['regularizer_version']}"
     )
 
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Train constrained reprojection/depth-v1 ellipsoids on the five ego intervals
-# held out from the initial W254 37-81 / 86-137 controlled experiment.
+# Train ORIGINAL constrained reprojection/depth-v1 ellipsoids on the five ego intervals
+# held out from the initial W254 37-81 / 86-137 controlled experiment.  Those
+# two original-v1 runs already exist, so this completes the seven-interval
+# ORIGINAL benchmark without retraining them.
 #
 # Each interval runs once with the regular texture layout and once with
 # Visible-UV.  Geometry, legacy texture orientation, model, and all other
@@ -58,6 +60,9 @@ fit = document['fit']
 assert document['format_version'] == 4
 assert document['sequence'] == 'segment-' + segment
 assert fit['mode'] == 'reprojection_depth_proxy'
+# Existing original-v1 files predate explicit regularizer metadata.  Absence
+# therefore means the historical, unmodified objective rather than an error.
+assert fit.get('regularizer_version', 'original') == 'original'
 assert (document['frame_slice']['start'], document['frame_slice']['stop'], document['frame_slice']['step']) == (int(first), int(last) + 1, 1)
 assert all(math.isfinite(value) and value > 0 for value in fit['radii'])
 assert fit['conservative_minimum_camera_surface_distance'] >= fit['target_minimum_camera_surface_distance'] - 1e-6
@@ -86,4 +91,4 @@ PY
   done
 done
 
-printf '\nFinished ten held-out reprojection/depth benchmark jobs (DRY_RUN=%s).\n' "$dry_run"
+printf '\nFinished ten remaining ORIGINAL reprojection/depth benchmark jobs (DRY_RUN=%s).\n' "$dry_run"

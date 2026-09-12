@@ -10,7 +10,9 @@ from diagnostics.parallax_core import intersect, unit
 from reprojection_ellipsoid import (
     ReprojectionFitConfig,
     enforce_safety,
+    evaluate_geometry,
     fit_reprojection_depth_ellipsoid,
+    regularizer_version,
 )
 
 
@@ -84,6 +86,22 @@ class ReprojectionEllipsoidTests(unittest.TestCase):
         self.assertGreaterEqual(after["conservative_camera_clearance_m"], config.minimum_camera_surface_distance - 1e-12)
         self.assertGreaterEqual(after["minimum_axis_radius_m"], config.minimum_axis_radius)
         self.assertLessEqual(after["maximum_axis_ratio"], config.max_axis_ratio + 1e-12)
+
+    def test_radius_excess_regularizer_penalizes_only_above_reference_scale(self):
+        pairs, truth = synthetic_pairs()
+        config = ReprojectionFitConfig(max_pairs=360, max_depth_rays=180, radius_excess_weight=5.0)
+        within = evaluate_geometry(pairs, truth, np.arange(360), np.arange(180), config, 20.0)
+        expanded = evaluate_geometry(
+            pairs, {**truth, "radii": np.array([40.0, 10.0, 16.0])},
+            np.arange(360), np.arange(180), config, 20.0,
+        )
+        self.assertEqual(regularizer_version(config), "new_radius_scale")
+        self.assertEqual(within["radius_excess_log"]["p95"], 0.0)
+        self.assertGreater(expanded["radius_excess_log"]["p95"], 0.0)
+        self.assertGreater(expanded["radius_excess_huber_loss"], 0.0)
+
+    def test_zero_radius_excess_weight_preserves_original_label(self):
+        self.assertEqual(regularizer_version(ReprojectionFitConfig()), "original")
 
 
 if __name__ == "__main__":

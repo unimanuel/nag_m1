@@ -146,6 +146,8 @@ class ParallaxDiagnosticsTests(unittest.TestCase):
     def test_reprojection_depth_run_classification(self):
         p=Path('2026_W254_37_81_large-undistorted_ellipsoid_reprojection_depth_v1_visuv')
         self.assertEqual(classify_run(p),('reprojection_v1','visuv','benchmark'))
+        p=Path('2026_W254_37_81_large-undistorted_ellipsoid_reprojection_depth_new_radius_scale_v1_visuv')
+        self.assertEqual(classify_run(p),('reprojection_new_radius_scale_v1','visuv','benchmark'))
 
     def test_reprojection_spatial_comparisons_include_direct_geometry_references(self):
         def run(family, mode):
