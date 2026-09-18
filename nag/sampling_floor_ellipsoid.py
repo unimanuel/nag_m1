@@ -21,7 +21,8 @@ def floor_statistics(sigma, reference, weights, threshold=.5):
 
 
 def fit_sampling_floor(pairs, original, sphere, mapping, size,
-                       config=ReprojectionFitConfig(), max_sampling=4096):
+                       config=ReprojectionFitConfig(), max_sampling=4096,
+                       preserve_zero_floor=False):
     """One fixed recipe: continuation weights 5,10,20; 2% geometric budget.
 
     No radius-excess prior is active. The original feasible fit and every
@@ -108,6 +109,38 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
         if np.min(constraints(x)) >= -1e-7:
             candidates.append(x.copy())
 
+    if preserve_zero_floor:
+        # Check every valid source ray, not only the optimization subsample.
+        all_pix, all_ids = pixels[valid], pairs['source_ids'][valid]
+        all_w = balanced_weights(all_ids, all_pix, size)
+        all_ref = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], sphere, mapping)['texels_per_pixel_min']
+        all_sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], original, mapping)['texels_per_pixel_min']
+        gate = floor_statistics(all_sigma, all_ref, all_w)
+        full = evaluate_geometry(pairs, original, supported, np.arange(len(pairs['source_points'])), config)
+        safe = (np.isfinite(full['weighted_data_loss']) and
+                min(full['valid_pair_fraction'], full['valid_depth_fraction']) == 1 and
+                full['max_camera_normalized_radius'] <= config.max_camera_normalized_radius + 1e-7 and
+                full['conservative_camera_clearance_m'] >= config.minimum_camera_surface_distance - 1e-7 and
+                full['minimum_axis_radius_m'] >= config.minimum_axis_radius - 1e-7 and
+                full['maximum_axis_ratio'] <= config.max_axis_ratio + 1e-7)
+        if gate['loss'] == 0 and safe:
+            exact = evaluate_geometry(pairs, original, pi, di, config)
+            return {'geometry': original, 'config': asdict(config),
+                'regularizer_version': 'sampling_floor_v2',
+                'reference_max_axis_radius_m': float(original['radii'].max()),
+                'optimization_pair_count': len(pi), 'optimization_depth_ray_count': len(di),
+                'diagnostics': {'initial_safety_projected': exact, 'final': exact}, 'candidates': [],
+                'sampling_floor': {'threshold': .5, 'huber_log': .2, 'weights': [5., 10., 20.],
+                    'max_sampling_rays': max_sampling, 'sampling_ray_count': len(si),
+                    'geometric_budget_fraction': .02, 'initial': gate, 'final': gate,
+                    'full_sampling': {'original': gate, 'final': gate},
+                    'original_combined_objective': exact['weighted_data_loss'],
+                    'final_combined_objective': exact['weighted_data_loss'],
+                    'full_original': full, 'full_final': full, 'sphere': sphere,
+                    'canonical_mapping': mapping, 'retained_original': True,
+                    'zero_floor_preserved': True, 'optimization_skipped': True,
+                    'zero_floor_check_ray_count': len(valid)}}
+
     for weight in (5., 10., 20.):
         result = minimize(lambda x: score(x, weight), start, method='SLSQP', bounds=bounds,
                           constraints={'type': 'ineq', 'fun': constraints}, callback=retain,
@@ -146,7 +179,7 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
     for name, g in [('original', initial), ('final', selected)]:
         sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], g, mapping)['texels_per_pixel_min']
         full_floor[name] = floor_statistics(sigma, all_ref, all_w)
-    return {'geometry': selected, 'config': asdict(config), 'regularizer_version': 'sampling_floor_v1',
+    return {'geometry': selected, 'config': asdict(config), 'regularizer_version': 'sampling_floor_v2' if preserve_zero_floor else 'sampling_floor_v1',
             'reference_max_axis_radius_m': float(initial['radii'].max()),
             'optimization_pair_count': len(pi), 'optimization_depth_ray_count': len(di),
             'diagnostics': {'initial_safety_projected': before, 'final': final}, 'candidates': history,

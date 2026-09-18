@@ -22,33 +22,39 @@ from fit_reprojection_ellipsoid import (_source_geometry, _validate_contract, _c
 
 LABELS = ['W191_0_40', 'W254_0_37', 'W254_37_81', 'W254_86_137', 'W254_139_195']
 VERSION = 'sampling_floor_v1'
+REVISION_LABELS = ['W191_40_128', 'W191_128_198', 'W254_86_137']
 
 
-def paths(root, label):
+def paths(root, label, version=VERSION):
     segment, first, stop = SEQUENCES[label]
     parent = root / f'segment-{segment}'
     prefix = f'frames_{first:03d}_{stop-1:03d}_reprojection_depth'
-    return parent / (prefix + '_v1') / 'ellipsoid.json', parent / (prefix + '_' + VERSION)
+    return parent / (prefix + '_v1') / 'ellipsoid.json', parent / (prefix + '_' + version)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=['prepare', 'train'])
-    parser.add_argument('--sequences', nargs='+', choices=LABELS, default=LABELS)
+    parser.add_argument('--sequences', nargs='+', choices=list(SEQUENCES))
+    parser.add_argument('--preserve-zero-floor', action='store_true', help='Version 2: preserve feasible zero-penalty originals exactly')
+    parser.add_argument('--retrain-unchanged', action='store_true', help='Train even if version 2 preserved the original geometry exactly')
     parser.add_argument('--prepared-root', type=Path, default=Path('/mnt/d/CGProjectData/waymo/diagnostics/parallax_v1'))
     parser.add_argument('--ellipsoid-root', type=Path, default=Path('/mnt/d/CGProjectData/waymo/ellipsoids'))
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--modes', nargs='+', choices=['regular', 'visuv'], default=['regular', 'visuv'])
     parser.add_argument('--max-iterations', type=int, default=200)
     args = parser.parse_args()
+    version = 'sampling_floor_v2' if args.preserve_zero_floor else VERSION
+    args.sequences = args.sequences or (REVISION_LABELS if args.preserve_zero_floor else LABELS)
     if args.max_iterations <= 0:
         parser.error('--max-iterations must be positive')
     if args.stage == 'train':
         commands = []
+        reuse_inventory = None
         for label in args.sequences:
-            source, out = paths(args.ellipsoid_root, label)
+            source, out = paths(args.ellipsoid_root, label, version)
             document = json.loads((out / 'ellipsoid.json').read_text())
-            if document['fit']['regularizer_version'] != VERSION:
+            if document['fit']['regularizer_version'] != version:
                 raise ValueError(f'{label}: wrong regularizer version')
             segment, first, stop = SEQUENCES[label]
             if document['sequence'] != f'segment-{segment}' or document['frame_slice'] != json.loads(source.read_text())['frame_slice']:
@@ -56,12 +62,32 @@ def main():
             report = json.loads((out / 'sampling_floor_diagnostics.json').read_text())
             if report['full_final']['weighted_data_loss'] > report['full_original']['weighted_data_loss'] * 1.02 + 1e-6:
                 raise ValueError(f'{label}: geometric budget exceeded')
+            if report.get('zero_floor_preserved') and not args.retrain_unchanged:
+                original = json.loads(source.read_text())
+                if any(not np.array_equal(_source_geometry(document)[k], _source_geometry(original)[k])
+                       for k in ('center', 'radii', 'rotation')):
+                    raise ValueError(f'{label}: claimed preserved geometry differs from original')
+                if reuse_inventory is None:
+                    reuse_inventory = inventory(REPO, args.sequences, REPO / 'data/datasets/waymo',
+                                                ['2026-09-12_reprojection_depth_v1'])
+                for mode in args.modes:
+                    matches = [r for r in reuse_inventory['runs'] if r['sequence'] == label and
+                               r['family'] == 'reprojection_v1' and r['mode'] == mode and r['cohort'] == 'benchmark']
+                    if len(matches) != 1:
+                        raise ValueError(f'{label} {mode}: no unambiguous completed original; use --retrain-unchanged')
+                    if any(not np.allclose(_source_geometry(original)[k], matches[0]['geometry'][k], rtol=1e-6, atol=1e-4)
+                           for k in ('center', 'radii', 'rotation')):
+                        raise ValueError(f'{label} {mode}: completed original geometry mismatch')
+                    print(f'  reuse {mode}: {matches[0]["path"]}', flush=True)
+                print(f'{label}: exact original geometry preserved; reuse original reprojection-v1 results '
+                      f'(not a new training run). Use --retrain-unchanged for a repeat.', flush=True)
+                continue
             for mode in args.modes:
                 suffix = '_sph_visuv' if mode == 'visuv' else ''
                 config = REPO / 'config/waymo/large-ego' / f'segment-{segment}_{first}_{stop-1}_large-undistorted{suffix}.yaml'
                 if not config.is_file():
                     raise FileNotFoundError(config)
-                name = f'{label}_large-undistorted_ellipsoid_reprojection_depth_{VERSION}' + ('_visuv' if mode == 'visuv' else '')
+                name = f'{label}_large-undistorted_ellipsoid_reprojection_depth_{version}' + ('_visuv' if mode == 'visuv' else '')
                 commands.append([sys.executable, str(REPO / 'nag/scripts/run_nag.py'),
                     '--config-path', str(config), '--background-plane-type',
                     'nag.model.view_dependent_background_image_ellipsoid_scene_node_3d.ViewDependentBackgroundImageEllipsoidSceneNode3D',
@@ -78,7 +104,7 @@ def main():
     inv = inventory(REPO, args.sequences, REPO / 'data/datasets/waymo', ['2026-09-12_reprojection_depth_v1'])
     jobs = []
     for label in args.sequences:
-        source, out = paths(args.ellipsoid_root, label)
+        source, out = paths(args.ellipsoid_root, label, version)
         document = json.loads(source.read_text())
         pointer = args.prepared_root / label / 'prepared.json'
         prepared = check_prepared(pointer, REPO)
@@ -115,13 +141,16 @@ def main():
             pairs = dict(archive)
         print(f'[fit] {label}', flush=True)
         fit = fit_sampling_floor(pairs, _source_geometry(document), sphere['geometry'],
-                                 original_run['mapping'], original_run['size'], cfg)
+                                 original_run['mapping'], original_run['size'], cfg,
+                                 preserve_zero_floor=args.preserve_zero_floor)
         out.mkdir(parents=True)
         _copy_inspection_assets(source, out)
         _write_mesh(out / 'ellipsoid.ply', fit['geometry'])
         _write_diagnostics(out, fit, label, source, pointer)
         result = _document(document, fit, source, pointer, label)
         result['fit']['method'] = 'Original reprojection-depth fit refined with canonical regular texture sampling floor; constrained SLSQP continuation'
+        if fit['sampling_floor'].get('zero_floor_preserved'):
+            result['fit']['method'] = 'Exact original reprojection-depth geometry retained after full cached-source zero-floor and safety checks; optimization skipped'
         result['fit']['sampling_floor'] = fit['sampling_floor']
         result['files']['sampling_floor_diagnostics_json'] = 'sampling_floor_diagnostics.json'
         result['reprojection_fit']['source_geometry_role'] = 'original reprojection-v1 fit, not raw-v4'
