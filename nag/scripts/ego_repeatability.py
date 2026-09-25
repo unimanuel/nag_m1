@@ -20,8 +20,14 @@ from diagnostics.parallax_io import SEQUENCES
 V2 = {'W191_40_128', 'W191_128_198', 'W254_86_137'}
 METRICS = ('MPSNR', 'SSIM', 'LPIPS')
 BATCHES = {
-    'part1': ['W191_0_40', 'W191_40_128', 'W254_37_81'],
-    'part2': ['W191_128_198', 'W254_0_37', 'W254_86_137', 'W254_139_195'],
+    # Estimated wall times are based on the completed sampling-floor runs,
+    # multiplied by 12 jobs per interval (3 repeats x 2 mappings x 2 poles).
+    # The one short final batch is unavoidable with seven indivisible intervals;
+    # this minimises the longest of the four batches rather than job-count skew.
+    'part1of4': ['W191_40_128', 'W254_0_37'],       # about 10.8 hours
+    'part2of4': ['W191_128_198', 'W254_37_81'],     # about 11.0 hours
+    'part3of4': ['W191_0_40', 'W254_139_195'],      # about 10.6 hours
+    'part4of4': ['W254_86_137'],                    # about 5.2 hours
 }
 
 

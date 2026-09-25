@@ -1,22 +1,34 @@
 # Seven-interval training repeatability
 
-## Combined upright-pole experiment (two batches)
+## Combined upright-pole experiment (four batches)
 
 Use these instead of the legacy-only launcher for the combined experiment:
 
 ```bash
 DRY_RUN=1 bash run_ego_poles_repeatability_part1.sh
 bash run_ego_poles_repeatability_part1.sh
-# At another convenient time:
+
 DRY_RUN=1 bash run_ego_poles_repeatability_part2.sh
 bash run_ego_poles_repeatability_part2.sh
+
+DRY_RUN=1 bash run_ego_poles_repeatability_part3.sh
+bash run_ego_poles_repeatability_part3.sh
+
+DRY_RUN=1 bash run_ego_poles_repeatability_part4.sh
+bash run_ego_poles_repeatability_part4.sh
 ```
 
-Part 1: W191 0-40, W191 40-128, W254 37-81 (36 trainings).
-Part 2: W191 128-198, W254 0-37, W254 86-137, W254 139-195 (48 trainings).
+| Batch | Intervals | Trainings | Earlier-rate estimate |
+| --- | --- | ---: | ---: |
+| Part 1 | W191 40-128; W254 0-37 | 24 | about 10.8 hours |
+| Part 2 | W191 128-198; W254 37-81 | 24 | about 11.0 hours |
+| Part 3 | W191 0-40; W254 139-195 | 24 | about 10.6 hours |
+| Part 4 | W254 86-137 | 12 | about 5.2 hours |
+
 Both use three seed-42 repeats, regular and Visible-UV, and both `legacy`
-and `world_y`. The unequal counts roughly balance historical training time:
-about 18.5 and 19 hours respectively, before any upright-mapping timing changes.
+and `world_y`. The unequal counts minimise the longest batch using historical
+training times; the single-interval fourth batch is unavoidable with seven
+indivisible intervals. Actual world-Y timing may differ from these estimates.
 
 Only texture coordinates change. Geometry files, runtime margin, training
 settings and seed are identical within each pair. No refitting or new PLYs.
@@ -26,13 +38,19 @@ choose a different crop/grid as a consequence of the changed mapping.
 
 Each matched orientation pair runs consecutively; order reverses on the second
 repeat. Jobs run sequentially, not concurrently on the same GPU. Separate roots:
-`runs/2026-09-25_ego_poles_repeatability_part1` and
-`runs/2026-09-25_ego_poles_repeatability_part2`.
+`runs/2026-09-25_ego_poles_repeatability_part1of4`,
+`runs/2026-09-25_ego_poles_repeatability_part2of4`,
+`runs/2026-09-25_ego_poles_repeatability_part3of4`, and
+`runs/2026-09-25_ego_poles_repeatability_part4of4`.
+All four roots are new so that they cannot accidentally collide with the
+superseded two-batch plan.
 Rerun the identical wrapper to skip completed jobs and retry incomplete ones.
 
 ```bash
 bash run_ego_poles_repeatability_part1.sh --summary
 bash run_ego_poles_repeatability_part2.sh --summary
+bash run_ego_poles_repeatability_part3.sh --summary
+bash run_ego_poles_repeatability_part4.sh --summary
 ```
 
 Summaries separate orientation groups and report paired `world_y - legacy`

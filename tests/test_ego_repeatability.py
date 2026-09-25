@@ -36,9 +36,10 @@ class RepeatabilityTests(unittest.TestCase):
             self.assertEqual(cmd[cmd.index('--output-path') + 1], str(root / 'output'))
             self.assertNotIn('--deterministic', cmd)
             combined = []
+            expected_jobs = {'part1of4': 24, 'part2of4': 24, 'part3of4': 24, 'part4of4': 12}
             for part, labels in driver.BATCHES.items():
                 batch = driver.plan(labels, ['regular', 'visuv'], 3, [], root, ['legacy', 'world_y'])
-                self.assertEqual(len(batch), 36 if part == 'part1' else 48)
+                self.assertEqual(len(batch), expected_jobs[part])
                 for first, second in zip(batch[::2], batch[1::2]):
                     self.assertEqual(first['geometry_sha256'], second['geometry_sha256'])
                     self.assertEqual(first['config_sha256'], second['config_sha256'])
