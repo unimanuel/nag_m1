@@ -1,5 +1,51 @@
 # Seven-interval training repeatability
 
+## Combined upright-pole experiment (two batches)
+
+Use these instead of the legacy-only launcher for the combined experiment:
+
+```bash
+DRY_RUN=1 bash run_ego_poles_repeatability_part1.sh
+bash run_ego_poles_repeatability_part1.sh
+# At another convenient time:
+DRY_RUN=1 bash run_ego_poles_repeatability_part2.sh
+bash run_ego_poles_repeatability_part2.sh
+```
+
+Part 1: W191 0-40, W191 40-128, W254 37-81 (36 trainings).
+Part 2: W191 128-198, W254 0-37, W254 86-137, W254 139-195 (48 trainings).
+Both use three seed-42 repeats, regular and Visible-UV, and both `legacy`
+and `world_y`. The unequal counts roughly balance historical training time:
+about 18.5 and 19 hours respectively, before any upright-mapping timing changes.
+
+Only texture coordinates change. Geometry files, runtime margin, training
+settings and seed are identical within each pair. No refitting or new PLYs.
+`world_y` uses upright physical poles and a fixed world-Z-based longitude
+reference; automatic seam placement is deliberately excluded. Visible-UV may
+choose a different crop/grid as a consequence of the changed mapping.
+
+Each matched orientation pair runs consecutively; order reverses on the second
+repeat. Jobs run sequentially, not concurrently on the same GPU. Separate roots:
+`runs/2026-09-25_ego_poles_repeatability_part1` and
+`runs/2026-09-25_ego_poles_repeatability_part2`.
+Rerun the identical wrapper to skip completed jobs and retry incomplete ones.
+
+```bash
+bash run_ego_poles_repeatability_part1.sh --summary
+bash run_ego_poles_repeatability_part2.sh --summary
+```
+
+Summaries separate orientation groups and report paired `world_y - legacy`
+metric differences only when both members finished. Positive PSNR/SSIM deltas
+and negative LPIPS deltas favor upright poles. Missing pairs are not imputed.
+These are fresh cohorts, not silent reuse of the older legacy-only batch.
+Existing old manifests remain readable through `--summary`; code hashing will
+reject resuming an old batch across this launcher change. Do not modify or
+relocate either new batch while it is active. Legacy-only defaults remain
+available below; extra seeds are optional, not part of the 84-job experiment.
+
+## Legacy-only experiment
+
 This batch measures the stability of the latest validated sampling-floor
 ellipsoids, not fitter randomness. It does not regenerate geometry or switch
 texture poles, and does not include sphere or plane trainings.

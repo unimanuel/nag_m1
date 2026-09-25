@@ -1,5 +1,7 @@
 """CPU-only tests for the repeat batch; never starts training."""
 import csv
+import contextlib
+import io
 import json
 from pathlib import Path
 import sys
@@ -33,6 +35,39 @@ class RepeatabilityTests(unittest.TestCase):
             self.assertEqual(cmd[cmd.index('--seed') + 1], '42')
             self.assertEqual(cmd[cmd.index('--output-path') + 1], str(root / 'output'))
             self.assertNotIn('--deterministic', cmd)
+            combined = []
+            for part, labels in driver.BATCHES.items():
+                batch = driver.plan(labels, ['regular', 'visuv'], 3, [], root, ['legacy', 'world_y'])
+                self.assertEqual(len(batch), 36 if part == 'part1' else 48)
+                for first, second in zip(batch[::2], batch[1::2]):
+                    self.assertEqual(first['geometry_sha256'], second['geometry_sha256'])
+                    self.assertEqual(first['config_sha256'], second['config_sha256'])
+                    self.assertEqual(first['seed'], second['seed'])
+                    self.assertEqual({first['orientation'], second['orientation']}, {'legacy', 'world_y'})
+                    expected = 'legacy' if first['repeat'] % 2 else 'world_y'
+                    self.assertEqual(first['orientation'], expected)
+                    cmd = driver.command(second, root / 'output')
+                    self.assertEqual(cmd[cmd.index('--background-ellipsoid-texture-orientation') + 1], second['orientation'])
+                combined.extend(batch)
+            self.assertEqual(len({j['id'] for j in combined}), 84)
+            self.assertEqual({j['label'] for j in combined}, set(driver.SEQUENCES))
+
+    def test_summary_separates_orientations_and_reports_paired_deltas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs = []
+            for i, orientation in enumerate(['legacy', 'world_y']):
+                (root / orientation / 'attempt_001').mkdir(parents=True)
+                jobs.append(dict(id=orientation, label='W254_86_137', mode='regular',
+                    group='same_seed', seed=42, repeat=1, orientation=orientation, frame_count=52))
+            def metrics(path, count):
+                return {m: (2. if path.parent.name == 'world_y' else 1.) for m in driver.METRICS}
+            stream = io.StringIO()
+            with patch.object(driver, 'completed', side_effect=metrics), contextlib.redirect_stdout(stream):
+                driver.summarize(root, jobs)
+            self.assertIn('same_seed / legacy n=1', stream.getvalue())
+            self.assertIn('same_seed / world_y n=1', stream.getvalue())
+            self.assertIn('mean_delta=+1.000000', stream.getvalue())
 
     def test_completion_requires_exit_frames_and_finite_epoch80_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:

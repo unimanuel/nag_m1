@@ -19,6 +19,10 @@ from diagnostics.parallax_io import SEQUENCES
 
 V2 = {'W191_40_128', 'W191_128_198', 'W254_86_137'}
 METRICS = ('MPSNR', 'SSIM', 'LPIPS')
+BATCHES = {
+    'part1': ['W191_0_40', 'W191_40_128', 'W254_37_81'],
+    'part2': ['W191_128_198', 'W254_0_37', 'W254_86_137', 'W254_139_195'],
+}
 
 
 def sha(path):
@@ -46,7 +50,7 @@ def completed(folder, frame_count):
     return values
 
 
-def plan(labels, modes, repeats, extra_seeds, root):
+def plan(labels, modes, repeats, extra_seeds, root, orientations=('legacy',)):
     jobs = []
     rounds = [('same_seed', 42, n) for n in range(1, repeats + 1)]
     rounds += [('different_seed', seed, 1) for seed in extra_seeds]
@@ -67,11 +71,19 @@ def plan(labels, modes, repeats, extra_seeds, root):
                 cfg = yaml.safe_load(config.read_text())['NAGConfig']
                 if cfg.get('deterministic', False) is not False or cfg.get('checkpoint_path') or cfg.get('max_epochs') != 80:
                     raise ValueError(f'{config}: requires fresh epoch-80 training with deterministic=False')
-                job_id = f'{label}_{mode}_{group}_seed{seed}_repeat{repeat:02d}'
-                jobs.append(dict(id=job_id, label=label, mode=mode, group=group,
-                    seed=seed, repeat=repeat, frame_count=stop-first,
-                    config=str(config), config_sha256=sha(config),
-                    geometry=str(geometry), geometry_sha256=sha(geometry)))
+                # Keep comparisons adjacent; reverse order on alternate repeats
+                # so the upright treatment is not always the later job.
+                order = list(orientations)
+                if repeat % 2 == 0:
+                    order.reverse()
+                for orientation in order:
+                    job_id = f'{label}_{mode}_{group}_seed{seed}_repeat{repeat:02d}'
+                    if orientation != 'legacy':
+                        job_id += f'_texture_{orientation}'
+                    jobs.append(dict(id=job_id, label=label, mode=mode, group=group,
+                        orientation=orientation, seed=seed, repeat=repeat, frame_count=stop-first,
+                        config=str(config), config_sha256=sha(config),
+                        geometry=str(geometry), geometry_sha256=sha(geometry)))
     return jobs
 
 
@@ -81,12 +93,13 @@ def command(job, output):
         'nag.model.view_dependent_background_image_ellipsoid_scene_node_3d.ViewDependentBackgroundImageEllipsoidSceneNode3D',
         '--background-ellipsoid-path', job['geometry'],
         '--background-ellipsoid-scale-margin', '0',
-        '--background-ellipsoid-texture-orientation', 'legacy',
+        '--background-ellipsoid-texture-orientation', job.get('orientation', 'legacy'),
         '--seed', str(job['seed']), '--name', job['id'], '--output-path', str(output)]
 
 
 def summarize(root, jobs):
     groups = {}
+    pairs = {}
     done = 0
     for job in jobs:
         matches = [(p, completed(p, job['frame_count'])) for p in sorted((root / job['id']).glob('attempt_*'))]
@@ -95,7 +108,10 @@ def summarize(root, jobs):
             raise ValueError(f'Multiple completed attempts for {job["id"]}; inspect before analysis')
         if good:
             done += 1
-            groups.setdefault((job['label'], job['mode'], job['group']), []).append(good[0][1])
+            orientation = job.get('orientation', 'legacy')
+            groups.setdefault((job['label'], job['mode'], job['group'], orientation), []).append(good[0][1])
+            key = (job['label'], job['mode'], job['group'], job['seed'], job['repeat'])
+            pairs.setdefault(key, {})[orientation] = good[0][1]
     print(f'Completed {done}/{len(jobs)} jobs')
     for key, values in sorted(groups.items()):
         print(' / '.join(key), f'n={len(values)}')
@@ -103,28 +119,45 @@ def summarize(root, jobs):
             v = [r[metric] for r in values]
             sd = f'{statistics.stdev(v):.6f}' if len(v) > 1 else 'n/a'
             print(f'  {metric}: mean={statistics.mean(v):.6f}, sample_sd={sd}, min={min(v):.6f}, max={max(v):.6f}')
+    deltas = {}
+    for key, pair in pairs.items():
+        if 'legacy' in pair and 'world_y' in pair:
+            deltas.setdefault(key[:3], []).append({m: pair['world_y'][m] - pair['legacy'][m] for m in METRICS})
+    for key, values in sorted(deltas.items()):
+        print('PAIRED world_y minus legacy:', ' / '.join(key), f'n={len(values)}')
+        for metric in METRICS:
+            v = [r[metric] for r in values]
+            sd = f'{statistics.stdev(v):.6f}' if len(v) > 1 else 'n/a'
+            print(f'  {metric}: mean_delta={statistics.mean(v):+.6f}, sample_sd={sd}')
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--sequences', nargs='+', choices=list(SEQUENCES), default=list(SEQUENCES))
+    p.add_argument('--sequences', nargs='+', choices=list(SEQUENCES))
+    p.add_argument('--batch', choices=list(BATCHES))
+    p.add_argument('--texture-orientations', nargs='+', choices=['legacy', 'world_y'], default=['legacy'])
     p.add_argument('--modes', nargs='+', choices=['regular', 'visuv'], default=['regular', 'visuv'])
     p.add_argument('--repeats', type=int, default=3)
     p.add_argument('--extra-seeds', nargs='*', type=int, default=[])
     p.add_argument('--ellipsoid-root', type=Path, default=Path('/mnt/d/CGProjectData/waymo/ellipsoids'))
-    p.add_argument('--output-root', type=Path, default=REPO / 'runs/2026-09-25_ego_repeatability')
+    p.add_argument('--output-root', type=Path)
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--summary', action='store_true')
     args = p.parse_args()
-    root = args.output_root.resolve()
+    if args.batch and args.sequences:
+        p.error('Choose --batch or --sequences, not both')
+    args.sequences = args.sequences or (BATCHES[args.batch] if args.batch else list(SEQUENCES))
+    default_folder = f'2026-09-25_ego_poles_repeatability_{args.batch}' if args.batch else '2026-09-25_ego_repeatability'
+    root = (args.output_root or REPO / 'runs' / default_folder).resolve()
     if args.summary:
         summarize(root, json.loads((root / 'manifest.json').read_text())['jobs'])
         return
     if args.repeats < 2 or 42 in args.extra_seeds or any(s < 0 or s >= 2**32 for s in args.extra_seeds):
         p.error('Use at least two repeats; extra seeds must be unsigned 32-bit values other than 42')
-    if any(len(v) != len(set(v)) for v in [args.extra_seeds, args.sequences, args.modes]):
-        p.error('Duplicate sequences, modes or seeds are not allowed')
-    jobs = plan(args.sequences, args.modes, args.repeats, args.extra_seeds, args.ellipsoid_root.resolve())
+    if any(len(v) != len(set(v)) for v in [args.extra_seeds, args.sequences, args.modes, args.texture_orientations]):
+        p.error('Duplicate sequences, modes, seeds or orientations are not allowed')
+    jobs = plan(args.sequences, args.modes, args.repeats, args.extra_seeds,
+                args.ellipsoid_root.resolve(), args.texture_orientations)
     code = {str(f.relative_to(REPO)): sha(f) for base in [REPO / 'nag', REPO / 'tools/tools'] for f in sorted(base.rglob('*.py'))}
     versions = {name: importlib.metadata.version(name) for name in ['torch', 'numpy', 'lightning']}
     manifest = dict(schema=1, jobs=jobs, code=code, versions=versions, python=sys.version,
