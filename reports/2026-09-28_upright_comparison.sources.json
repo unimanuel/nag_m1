@@ -1,0 +1,682 @@
+{
+  "aggregation": "equal interval mean; repeat means within each interval",
+  "metrics": [
+    "MPSNR",
+    "SSIM",
+    "LPIPS"
+  ],
+  "runs": [
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W191_40_128_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part1of4/W254_0_37_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W191_128_198_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part2of4/W254_37_81_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W191_0_40_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part3of4/W254_139_195_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_regular_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_regular_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_visuv_same_seed_seed42_repeat01/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_visuv_same_seed_seed42_repeat01_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_regular_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_regular_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_visuv_same_seed_seed42_repeat02_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_visuv_same_seed_seed42_repeat02/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_regular_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_regular_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "legacy",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_visuv_same_seed_seed42_repeat03/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "upright",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-25_ego_poles_repeatability_part4of4/W254_86_137_visuv_same_seed_seed42_repeat03_texture_world_y/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W191_0_40_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W191_0_40_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W191_40_128_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W191_40_128_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W191_128_198_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W191_128_198_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_0_37_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_0_37_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_37_81_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_37_81_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_86_137_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_86_137_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_139_195_regular_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "upright_fit",
+      "path": "/mnt/c/coding/cgproject/nag1/runs/2026-09-28_upright_sampling_floor/W254_139_195_visuv_seed42_upright_sampling_floor_v2/attempt_001"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-21_missing_ego/2026-08-21_01-46-05_W191_0_40_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W191_0_40",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-09-12_regular_sphere/2026-09-12_04-26-10_W191_0_40_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-21_missing_ego/2026-08-21_02-42-36_W191_40_128_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W191_40_128",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-09-12_regular_sphere/2026-09-12_04-44-23_W191_40_128_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-21_missing_ego/2026-08-21_04-35-18_W191_128_198_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W191_128_198",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-09-12_regular_sphere/2026-09-12_05-20-47_W191_128_198_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_00-54-49_W254_0_37_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_0_37",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_01-11-34_W254_0_37_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_02-55-03_W254_37_81_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_37_81",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_03-30-00_W254_37_81_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_05-30-06_W254_86_137_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_86_137",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_05-55-26_W254_86_137_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "regular",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_07-54-12_W254_139_195_large-undistorted_radius_visible_plane_centers"
+    },
+    {
+      "sequence": "W254_139_195",
+      "mode": "visuv",
+      "family": "sphere",
+      "path": "/mnt/c/Coding/CGProject/nag1/runs/2026-08-19_ellipsoid_non_center/2026-08-19_08-28-27_W254_139_195_large-undistorted_sph_visuv_radius_visible_plane_centers"
+    }
+  ]
+}
