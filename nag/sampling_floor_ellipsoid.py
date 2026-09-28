@@ -1,4 +1,5 @@
 """Refine original reprojection fits with a sphere-relative texture sampling floor."""
+import copy
 from dataclasses import asdict
 import numpy as np
 from scipy.optimize import minimize
@@ -8,6 +9,29 @@ from diagnostics.parallax_evaluate import batched_project
 from reprojection_ellipsoid import (ReprojectionFitConfig, _array_geometry,
     _huber, _sample_indices, enforce_safety, evaluate_geometry)
 from texture_sampling_diagnostics import balanced_weights, sampling_metrics
+
+
+def world_y_regular_mapping(geometry, template):
+    """Return the runtime-equivalent fixed-seam world-Y regular UV mapping.
+
+    The world-Y basis depends on physical radii as well as the ellipsoid's
+    rotation.  It must consequently be recalculated for every proposed
+    geometry rather than copied from an initial candidate.  Keeping this
+    helper beside the fitter makes that dependency explicit and lets the
+    offline floor exactly use NAG's `world_y` convention.
+    """
+    if template.get('visible_uv', {}).get('enabled'):
+        raise ValueError('World-Y sampling-floor fitting requires canonical regular UV')
+    import torch
+    from nag.model.ellipsoid_texture import world_y_texture_rotation
+
+    result = copy.deepcopy(template)
+    rotation = torch.as_tensor(geometry['rotation'], dtype=torch.float64)
+    radii = torch.as_tensor(geometry['radii'], dtype=torch.float64)
+    result.update(mode='world_y',
+                  rotation=world_y_texture_rotation(rotation, radii).cpu().numpy().tolist(),
+                  u_offset=0.0)
+    return result
 
 
 def floor_statistics(sigma, reference, weights, threshold=.5):
@@ -22,7 +46,8 @@ def floor_statistics(sigma, reference, weights, threshold=.5):
 
 def fit_sampling_floor(pairs, original, sphere, mapping, size,
                        config=ReprojectionFitConfig(), max_sampling=4096,
-                       preserve_zero_floor=False):
+                       preserve_zero_floor=False, mapping_for_geometry=None,
+                       regularizer_version=None):
     """One fixed recipe: continuation weights 5,10,20; 2% geometric budget.
 
     No radius-excess prior is active. The original feasible fit and every
@@ -33,6 +58,13 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
         raise ValueError('Sampling-floor v1 isolates sampling: radius-excess weight must be zero')
     if mapping.get('visible_uv', {}).get('enabled'):
         raise ValueError('Fit with the canonical regular mapping, not Visible-UV')
+    mapping_depends_on_geometry = mapping_for_geometry is not None
+    if mapping_for_geometry is None:
+        mapping_for_geometry = lambda geometry: mapping
+    if regularizer_version is None:
+        regularizer_version = 'sampling_floor_v2' if preserve_zero_floor else 'sampling_floor_v1'
+    if not isinstance(regularizer_version, str) or not regularizer_version:
+        raise ValueError('regularizer_version must be a non-empty string')
     poses = pairs['poses']
     original = _array_geometry(original)
     initial = enforce_safety(original, poses, config)
@@ -50,7 +82,15 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
         raise ValueError('Too few sampling rays')
     pix, ids = pixels[si], pairs['source_ids'][si]
     weights = balanced_weights(ids, pix, size)
-    reference = sampling_metrics(pix, ids, poses, pairs['intrinsics'], sphere, mapping)['texels_per_pixel_min']
+    def candidate_mapping(geometry):
+        candidate = mapping_for_geometry(geometry)
+        if candidate.get('visible_uv', {}).get('enabled'):
+            raise ValueError('Sampling-floor mapping factory returned Visible-UV')
+        return candidate
+
+    initial_mapping = candidate_mapping(initial)
+    sphere_mapping = candidate_mapping(_array_geometry(sphere))
+    reference = sampling_metrics(pix, ids, poses, pairs['intrinsics'], sphere, sphere_mapping)['texels_per_pixel_min']
     if not np.isfinite(reference).all() or np.any(reference <= 0):
         raise ValueError('Invalid sphere sampling reference')
     rotation = initial['rotation']
@@ -69,7 +109,8 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
         if key not in cache:
             g = decode(x)
             metrics = evaluate_geometry(pairs, g, pi, di, config)
-            sigma = sampling_metrics(pix, ids, poses, pairs['intrinsics'], g, mapping)['texels_per_pixel_min']
+            sigma = sampling_metrics(pix, ids, poses, pairs['intrinsics'], g,
+                                     candidate_mapping(g))['texels_per_pixel_min']
             cache[key] = (metrics, floor_statistics(sigma, reference, weights))
             if len(cache) > 100:
                 cache.pop(next(iter(cache)))
@@ -113,8 +154,10 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
         # Check every valid source ray, not only the optimization subsample.
         all_pix, all_ids = pixels[valid], pairs['source_ids'][valid]
         all_w = balanced_weights(all_ids, all_pix, size)
-        all_ref = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], sphere, mapping)['texels_per_pixel_min']
-        all_sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], original, mapping)['texels_per_pixel_min']
+        all_ref = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], sphere,
+                                   sphere_mapping)['texels_per_pixel_min']
+        all_sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], original,
+                                     candidate_mapping(original))['texels_per_pixel_min']
         gate = floor_statistics(all_sigma, all_ref, all_w)
         full = evaluate_geometry(pairs, original, supported, np.arange(len(pairs['source_points'])), config)
         safe = (np.isfinite(full['weighted_data_loss']) and
@@ -126,7 +169,7 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
         if gate['loss'] == 0 and safe:
             exact = evaluate_geometry(pairs, original, pi, di, config)
             return {'geometry': original, 'config': asdict(config),
-                'regularizer_version': 'sampling_floor_v2',
+                'regularizer_version': regularizer_version,
                 'reference_max_axis_radius_m': float(original['radii'].max()),
                 'optimization_pair_count': len(pi), 'optimization_depth_ray_count': len(di),
                 'diagnostics': {'initial_safety_projected': exact, 'final': exact}, 'candidates': [],
@@ -137,7 +180,10 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
                     'original_combined_objective': exact['weighted_data_loss'],
                     'final_combined_objective': exact['weighted_data_loss'],
                     'full_original': full, 'full_final': full, 'sphere': sphere,
-                    'canonical_mapping': mapping, 'retained_original': True,
+                    'canonical_mapping': initial_mapping, 'sphere_mapping': sphere_mapping,
+                    'initial_mapping': initial_mapping, 'final_mapping': initial_mapping,
+                    'mapping_depends_on_geometry': mapping_depends_on_geometry,
+                    'retained_original': True,
                     'zero_floor_preserved': True, 'optimization_skipped': True,
                     'zero_floor_check_ray_count': len(valid)}}
 
@@ -174,12 +220,14 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
     final, floor_final = measure(encode(selected))
     all_pix, all_ids = pixels[valid], pairs['source_ids'][valid]
     all_w = balanced_weights(all_ids, all_pix, size)
-    all_ref = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], sphere, mapping)['texels_per_pixel_min']
+    all_ref = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], sphere,
+                               sphere_mapping)['texels_per_pixel_min']
     full_floor = {}
     for name, g in [('original', initial), ('final', selected)]:
-        sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], g, mapping)['texels_per_pixel_min']
+        sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], g,
+                                 candidate_mapping(g))['texels_per_pixel_min']
         full_floor[name] = floor_statistics(sigma, all_ref, all_w)
-    return {'geometry': selected, 'config': asdict(config), 'regularizer_version': 'sampling_floor_v2' if preserve_zero_floor else 'sampling_floor_v1',
+    return {'geometry': selected, 'config': asdict(config), 'regularizer_version': regularizer_version,
             'reference_max_axis_radius_m': float(initial['radii'].max()),
             'optimization_pair_count': len(pi), 'optimization_depth_ray_count': len(di),
             'diagnostics': {'initial_safety_projected': before, 'final': final}, 'candidates': history,
@@ -189,5 +237,8 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
                 'full_sampling': full_floor, 'original_combined_objective': score(encode(initial)),
                 'final_combined_objective': selected_score, 'full_original': full_before,
                 'full_final': evaluate_geometry(pairs, selected, supported, full_di, config),
-                'sphere': sphere, 'canonical_mapping': mapping,
+                'sphere': sphere, 'canonical_mapping': initial_mapping,
+                'sphere_mapping': sphere_mapping, 'initial_mapping': initial_mapping,
+                'final_mapping': candidate_mapping(selected),
+                'mapping_depends_on_geometry': mapping_depends_on_geometry,
                 'retained_original': bool(np.allclose(encode(initial), encode(selected), rtol=0, atol=1e-8))}}

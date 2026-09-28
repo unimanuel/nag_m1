@@ -10,7 +10,7 @@ from unittest.mock import patch
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'nag'))
-from sampling_floor_ellipsoid import fit_sampling_floor, floor_statistics
+from sampling_floor_ellipsoid import fit_sampling_floor, floor_statistics, world_y_regular_mapping
 from sampling_floor_ellipsoid import sampling_metrics
 from reprojection_ellipsoid import ReprojectionFitConfig, enforce_safety
 from test_reprojection_ellipsoid import synthetic_pairs
@@ -137,6 +137,28 @@ class SamplingFloorTests(unittest.TestCase):
         self.assertEqual(optimizer.call_count, 3)
         self.assertFalse(result['sampling_floor'].get('zero_floor_preserved', False))
         self.assertEqual(result['regularizer_version'], 'sampling_floor_v2')
+
+    def test_world_y_factory_matches_runtime_and_is_recorded(self):
+        pairs, geometry = synthetic_pairs()
+        cfg = ReprojectionFitConfig(max_pairs=128, max_depth_rays=128,
+            minimum_camera_surface_distance=3., minimum_axis_radius=5., max_iterations=2)
+        geometry = enforce_safety(geometry, pairs['poses'], cfg)
+        template = {'resolution_hw': [640, 960], 'visible_uv': {'enabled': False},
+                    'rotation': np.eye(3).tolist(), 'u_offset': .25}
+        mapping = world_y_regular_mapping(geometry, template)
+        self.assertEqual(mapping['mode'], 'world_y')
+        self.assertEqual(mapping['u_offset'], 0.)
+        self.assertEqual(template['u_offset'], .25)
+        result = fit_sampling_floor(
+            pairs, geometry, geometry, template, (960, 640), cfg, max_sampling=128,
+            preserve_zero_floor=True, mapping_for_geometry=lambda g: world_y_regular_mapping(g, template),
+            regularizer_version='sampling_floor_world_y_v2',
+        )
+        report = result['sampling_floor']
+        self.assertEqual(result['regularizer_version'], 'sampling_floor_world_y_v2')
+        self.assertTrue(report['mapping_depends_on_geometry'])
+        self.assertEqual(report['initial_mapping']['mode'], 'world_y')
+        self.assertEqual(report['final_mapping']['u_offset'], 0.)
 
 
 if __name__ == '__main__':
