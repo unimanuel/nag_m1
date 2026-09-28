@@ -8,12 +8,14 @@ import json
 import tempfile
 from unittest.mock import patch
 import numpy as np
+import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'nag'))
 from sampling_floor_ellipsoid import fit_sampling_floor, floor_statistics, world_y_regular_mapping
 from sampling_floor_ellipsoid import sampling_metrics
 from reprojection_ellipsoid import ReprojectionFitConfig, enforce_safety
 from test_reprojection_ellipsoid import synthetic_pairs
+from nag.model.ellipsoid_texture import world_y_texture_rotation
 
 
 class SamplingFloorTests(unittest.TestCase):
@@ -149,6 +151,11 @@ class SamplingFloorTests(unittest.TestCase):
         self.assertEqual(mapping['mode'], 'world_y')
         self.assertEqual(mapping['u_offset'], 0.)
         self.assertEqual(template['u_offset'], .25)
+        expected = world_y_texture_rotation(
+            torch.as_tensor(geometry['rotation'], dtype=torch.float64),
+            torch.as_tensor(geometry['radii'], dtype=torch.float64),
+        ).numpy()
+        np.testing.assert_allclose(mapping['rotation'], expected, atol=1e-12, rtol=1e-12)
         result = fit_sampling_floor(
             pairs, geometry, geometry, template, (960, 640), cfg, max_sampling=128,
             preserve_zero_floor=True, mapping_for_geometry=lambda g: world_y_regular_mapping(g, template),

@@ -22,14 +22,29 @@ def world_y_regular_mapping(geometry, template):
     """
     if template.get('visible_uv', {}).get('enabled'):
         raise ValueError('World-Y sampling-floor fitting requires canonical regular UV')
-    import torch
-    from nag.model.ellipsoid_texture import world_y_texture_rotation
-
     result = copy.deepcopy(template)
-    rotation = torch.as_tensor(geometry['rotation'], dtype=torch.float64)
-    radii = torch.as_tensor(geometry['radii'], dtype=torch.float64)
+    rotation = np.asarray(geometry['rotation'], dtype=np.float64)
+    radii = np.asarray(geometry['radii'], dtype=np.float64)
+    if rotation.shape != (3, 3) or radii.shape != (3,) or not np.isfinite(rotation).all() or \
+            not np.isfinite(radii).all() or np.any(radii <= 0):
+        raise ValueError('World-Y mapping requires finite 3x3 rotation and positive three-axis radii')
+    # This is the NumPy expression of
+    # nag.model.ellipsoid_texture.world_y_texture_rotation.  It deliberately
+    # stays dependency-free because this fitter is also imported as the
+    # top-level module `sampling_floor_ellipsoid`, where `nag.model` is not
+    # necessarily importable.  The unit test compares it to the runtime helper.
+    axes = np.eye(3, dtype=np.float64)
+    vertical = (axes[1] @ rotation) / radii
+    vertical /= np.linalg.norm(vertical)
+    forward = (axes[2] @ rotation) / radii
+    forward -= np.dot(forward, vertical) * vertical
+    if np.linalg.norm(forward) < 1e-6:
+        forward = (axes[0] @ rotation) / radii
+        forward -= np.dot(forward, vertical) * vertical
+    forward /= np.linalg.norm(forward)
+    right = np.cross(vertical, forward)
     result.update(mode='world_y',
-                  rotation=world_y_texture_rotation(rotation, radii).cpu().numpy().tolist(),
+                  rotation=np.stack((right, vertical, forward), axis=1).tolist(),
                   u_offset=0.0)
     return result
 
