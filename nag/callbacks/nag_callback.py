@@ -1600,6 +1600,9 @@ class NAGCallback(pl.Callback):
         model.active_training_phase = new_phase_idx
 
     def save_model(self, trainer: pl.Trainer, model: NAGModel, prefix: str = ""):
+        if prefix != "final-" and not getattr(model.config, "save_intermediate_checkpoints", False):
+            logging.debug("Skipping intermediate checkpoint; only the final checkpoint is enabled.")
+            return
         checkpoint_dir = os.path.join(model.config.output_path, "checkpoints")
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)

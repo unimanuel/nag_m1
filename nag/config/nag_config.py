@@ -515,8 +515,11 @@ class NAGConfig(EnvConfigMixin, ExperimentOutputConfig):
     debug: bool = field(default=False)
     """If the debug mode should be enabled. If True, will set the fast_dev_run flag of the Trainer to True."""
 
+    save_intermediate_checkpoints: bool = field(default=False)
+    """Enable periodic and phase-change checkpoints. By default only the final checkpoint is saved."""
+
     in_training_checkpoint_interval: Optional[int] = field(default=None)
-    """Describes when it will save a checkpoint. current_epoch modulo in_training_checkpoint_interval == 0"""
+    """Periodic checkpoint interval, used only when save_intermediate_checkpoints is enabled."""
 
     in_training_save_geometry_interval: int = field(default=1)
     """Describes when it will save the geometry of nodes in the scene. current_epoch modulo in_training_save_geometry_interval == 0"""
