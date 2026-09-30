@@ -62,15 +62,26 @@ def floor_statistics(sigma, reference, weights, threshold=.5):
 def fit_sampling_floor(pairs, original, sphere, mapping, size,
                        config=ReprojectionFitConfig(), max_sampling=4096,
                        preserve_zero_floor=False, mapping_for_geometry=None,
-                       regularizer_version=None):
-    """One fixed recipe: continuation weights 5,10,20; 2% geometric budget.
+                       regularizer_version=None, compactness_weight=0.,
+                       axis_multistart=False, floor_threshold=.5,
+                       preserve_floor_threshold=None):
+    """Sampling-floor continuation with an optional axis-neutral compactness test.
 
-    No radius-excess prior is active. The original feasible fit and every
-    feasible optimizer iterate compete under the same final objective. Final
-    selection also enforces the geometric budget on all cached supported pairs.
+    Defaults preserve the established 5/10/20 recipe and 2% geometric budget.
+    The optional log-volume term and generic radius contractions are reserved
+    for separately versioned experiments; neither imposes an axis ordering.
+    Final selection validates the geometric budget on all supported pairs.
     """
     if config.radius_excess_weight != 0:
         raise ValueError('Sampling-floor v1 isolates sampling: radius-excess weight must be zero')
+    if not np.isfinite(compactness_weight) or compactness_weight < 0:
+        raise ValueError('compactness_weight must be finite and nonnegative')
+    if not np.isfinite(floor_threshold) or floor_threshold <= 0:
+        raise ValueError('floor_threshold must be finite and positive')
+    if preserve_floor_threshold is None:
+        preserve_floor_threshold = floor_threshold
+    if not np.isfinite(preserve_floor_threshold) or preserve_floor_threshold <= 0:
+        raise ValueError('preserve_floor_threshold must be finite and positive')
     if mapping.get('visible_uv', {}).get('enabled'):
         raise ValueError('Fit with the canonical regular mapping, not Visible-UV')
     mapping_depends_on_geometry = mapping_for_geometry is not None
@@ -126,7 +137,8 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
             metrics = evaluate_geometry(pairs, g, pi, di, config)
             sigma = sampling_metrics(pix, ids, poses, pairs['intrinsics'], g,
                                      candidate_mapping(g))['texels_per_pixel_min']
-            cache[key] = (metrics, floor_statistics(sigma, reference, weights))
+            cache[key] = (metrics, floor_statistics(sigma, reference, weights,
+                                                   threshold=floor_threshold))
             if len(cache) > 100:
                 cache.pop(next(iter(cache)))
         return cache[key]
@@ -152,7 +164,10 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
 
     def score(x, weight=20.):
         m, floor = measure(x)
-        value = m['weighted_data_loss'] + weight * floor['loss']
+        # Log volume is invariant to ellipsoid orientation and does not prefer
+        # any named axis.  Its reference is only a constant for this fit.
+        log_volume_ratio = float(np.sum(x[3:] - np.log(initial['radii'])))
+        value = m['weighted_data_loss'] + weight * floor['loss'] + compactness_weight * log_volume_ratio
         return value if np.isfinite(value) else 1e12
 
     candidates = [start.copy()]
@@ -173,7 +188,8 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
                                    sphere_mapping)['texels_per_pixel_min']
         all_sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], original,
                                      candidate_mapping(original))['texels_per_pixel_min']
-        gate = floor_statistics(all_sigma, all_ref, all_w)
+        gate = floor_statistics(all_sigma, all_ref, all_w, threshold=preserve_floor_threshold)
+        current_floor = floor_statistics(all_sigma, all_ref, all_w, threshold=floor_threshold)
         full = evaluate_geometry(pairs, original, supported, np.arange(len(pairs['source_points'])), config)
         safe = (np.isfinite(full['weighted_data_loss']) and
                 min(full['valid_pair_fraction'], full['valid_depth_fraction']) == 1 and
@@ -188,12 +204,16 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
                 'reference_max_axis_radius_m': float(original['radii'].max()),
                 'optimization_pair_count': len(pi), 'optimization_depth_ray_count': len(di),
                 'diagnostics': {'initial_safety_projected': exact, 'final': exact}, 'candidates': [],
-                'sampling_floor': {'threshold': .5, 'huber_log': .2, 'weights': [5., 10., 20.],
+                'sampling_floor': {'threshold': floor_threshold,
+                    'preserve_floor_threshold': preserve_floor_threshold,
+                    'preserve_gate': gate, 'huber_log': .2, 'weights': [5., 10., 20.],
+                    'compactness_weight': compactness_weight, 'axis_multistart': axis_multistart,
+                    'multistart_seeds': [],
                     'max_sampling_rays': max_sampling, 'sampling_ray_count': len(si),
-                    'geometric_budget_fraction': .02, 'initial': gate, 'final': gate,
-                    'full_sampling': {'original': gate, 'final': gate},
-                    'original_combined_objective': exact['weighted_data_loss'],
-                    'final_combined_objective': exact['weighted_data_loss'],
+                    'geometric_budget_fraction': .02, 'initial': current_floor, 'final': current_floor,
+                    'full_sampling': {'original': current_floor, 'final': current_floor},
+                    'original_combined_objective': exact['weighted_data_loss'] + 20*current_floor['loss'],
+                    'final_combined_objective': exact['weighted_data_loss'] + 20*current_floor['loss'],
                     'full_original': full, 'full_final': full, 'sphere': sphere,
                     'canonical_mapping': initial_mapping, 'sphere_mapping': sphere_mapping,
                     'initial_mapping': initial_mapping, 'final_mapping': initial_mapping,
@@ -202,6 +222,24 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
                     'zero_floor_preserved': True, 'optimization_skipped': True,
                     'zero_floor_check_ray_count': len(valid)}}
 
+    seed_records = []
+    if axis_multistart:
+        # Generic one-axis contractions provide alternate basins without
+        # identifying forward/lateral/vertical axes or imposing an axis order.
+        for axis in range(3):
+            for factor in (.2, .35, .5):
+                seed_geometry = {key: value.copy() for key, value in initial.items()}
+                seed_geometry['radii'][axis] *= factor
+                seed_geometry = enforce_safety(seed_geometry, poses, config)
+                seed = encode(seed_geometry)
+                within_bounds = all(lo <= value <= hi for value, (lo, hi) in zip(seed, bounds))
+                feasible = bool(within_bounds and np.min(constraints(seed)) >= -1e-7)
+                seed_records.append({'axis': axis, 'factor': factor, 'feasible': feasible,
+                                     'score': score(seed) if within_bounds else None})
+                if feasible:
+                    candidates.append(seed.copy())
+
+    start = min(candidates, key=score).copy()
     for weight in (5., 10., 20.):
         result = minimize(lambda x: score(x, weight), start, method='SLSQP', bounds=bounds,
                           constraints={'type': 'ineq', 'fun': constraints}, callback=retain,
@@ -241,12 +279,16 @@ def fit_sampling_floor(pairs, original, sphere, mapping, size,
     for name, g in [('original', initial), ('final', selected)]:
         sigma = sampling_metrics(all_pix, all_ids, poses, pairs['intrinsics'], g,
                                  candidate_mapping(g))['texels_per_pixel_min']
-        full_floor[name] = floor_statistics(sigma, all_ref, all_w)
+        full_floor[name] = floor_statistics(sigma, all_ref, all_w, threshold=floor_threshold)
     return {'geometry': selected, 'config': asdict(config), 'regularizer_version': regularizer_version,
             'reference_max_axis_radius_m': float(initial['radii'].max()),
             'optimization_pair_count': len(pi), 'optimization_depth_ray_count': len(di),
             'diagnostics': {'initial_safety_projected': before, 'final': final}, 'candidates': history,
-            'sampling_floor': {'threshold': .5, 'huber_log': .2, 'weights': [5., 10., 20.],
+            'sampling_floor': {'threshold': floor_threshold,
+                'preserve_floor_threshold': preserve_floor_threshold,
+                'huber_log': .2, 'weights': [5., 10., 20.],
+                'compactness_weight': compactness_weight, 'axis_multistart': axis_multistart,
+                'multistart_seeds': seed_records,
                 'max_sampling_rays': max_sampling, 'sampling_ray_count': len(si),
                 'geometric_budget_fraction': .02, 'initial': floor_before, 'final': floor_final,
                 'full_sampling': full_floor, 'original_combined_objective': score(encode(initial)),

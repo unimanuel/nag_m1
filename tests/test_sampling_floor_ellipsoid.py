@@ -167,6 +167,54 @@ class SamplingFloorTests(unittest.TestCase):
         self.assertEqual(report['initial_mapping']['mode'], 'world_y')
         self.assertEqual(report['final_mapping']['u_offset'], 0.)
 
+    def test_compactness_multistart_records_generic_seeds_and_preserves_budget(self):
+        pairs, geometry = synthetic_pairs()
+        cfg = ReprojectionFitConfig(max_pairs=128, max_depth_rays=128,
+            minimum_camera_surface_distance=3., minimum_axis_radius=5., max_iterations=2)
+        geometry = enforce_safety(geometry, pairs['poses'], cfg)
+        sphere = {'center': np.zeros(3), 'radii': np.ones(3) * 30, 'rotation': np.eye(3)}
+        mapping = {'resolution_hw': [640, 960], 'visible_uv': {'enabled': False}}
+        result = fit_sampling_floor(pairs, geometry, sphere, mapping, (960, 640), cfg,
+            max_sampling=128, compactness_weight=.1, axis_multistart=True,
+            regularizer_version='upright_compact_test')
+        report = result['sampling_floor']
+        self.assertEqual(report['compactness_weight'], .1)
+        self.assertTrue(report['axis_multistart'])
+        self.assertEqual(len(report['multistart_seeds']), 9)
+        self.assertEqual({seed['axis'] for seed in report['multistart_seeds']}, {0, 1, 2})
+        self.assertLessEqual(report['full_final']['weighted_data_loss'],
+            report['full_original']['weighted_data_loss'] * 1.02 + 1e-6)
+        np.testing.assert_array_equal(result['geometry']['rotation'], geometry['rotation'])
+
+    def test_rejects_invalid_compactness_weight(self):
+        pairs, geometry = synthetic_pairs()
+        with self.assertRaisesRegex(ValueError, 'compactness_weight'):
+            fit_sampling_floor(pairs, geometry, geometry, {'resolution_hw': [640, 960]},
+                               (960, 640), compactness_weight=-.1)
+
+    def test_stronger_floor_preserves_original_that_passed_reference_gate(self):
+        pairs, geometry = synthetic_pairs()
+        cfg = ReprojectionFitConfig(max_pairs=128, max_depth_rays=128,
+            minimum_camera_surface_distance=3., minimum_axis_radius=5., max_iterations=1)
+        geometry = enforce_safety(geometry, pairs['poses'], cfg)
+        sphere = {'center': np.zeros(3), 'radii': np.ones(3) * 99, 'rotation': np.eye(3)}
+        mapping = {'resolution_hw': [640, 960], 'visible_uv': {'enabled': False}}
+
+        def density(pixels, ids, poses, intrinsics, candidate, chart):
+            is_sphere = np.allclose(candidate['radii'], sphere['radii'])
+            return {'texels_per_pixel_min': np.ones(len(pixels)) * (1. if is_sphere else .7)}
+
+        with patch('sampling_floor_ellipsoid.sampling_metrics', side_effect=density), \
+                patch('sampling_floor_ellipsoid.minimize') as optimizer:
+            result = fit_sampling_floor(pairs, geometry, sphere, mapping, (960, 640),
+                cfg, max_sampling=128, preserve_zero_floor=True, floor_threshold=.8,
+                preserve_floor_threshold=.5)
+        optimizer.assert_not_called()
+        report = result['sampling_floor']
+        self.assertTrue(report['zero_floor_preserved'])
+        self.assertEqual(report['preserve_floor_threshold'], .5)
+        self.assertGreater(report['full_sampling']['final']['loss'], 0)
+
 
 if __name__ == '__main__':
     unittest.main()
