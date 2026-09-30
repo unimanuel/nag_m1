@@ -55,6 +55,9 @@ completed prior diagnostic's inventory.
 Before reading flow, the loader renders three evenly spaced frames at the
 **original saved resolution**, with the original checkpoint weights and mapping.
 It compares both the full composite and the separately saved background layer.
+The background is re-rendered through the callback's joint per-object
+composition, not as a standalone background-only query: those paths can differ
+even with the same weights. The saved layer must match its actual export path.
 The quantization matches the final-render callback: multiply by 255, clamp,
 truncate to uint8. Defaults require mean absolute channel difference at most
 0.5 byte and 99th-percentile difference at most 2 bytes. These are tolerances

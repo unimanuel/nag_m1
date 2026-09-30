@@ -4,6 +4,7 @@ import sys
 import json
 import tempfile
 import unittest
+from unittest.mock import MagicMock
 
 import numpy as np
 from PIL import Image
@@ -11,7 +12,8 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'nag'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'nag/scripts'))
 from learned_flow_diagnostics import association, flow_fields, parity, statistics, uv_difference
-from ego_learned_background_flow import check_records, completed_result, file_record, saved_layers
+from ego_learned_background_flow import (check_records, completed_result, file_record,
+                                         render_verification, saved_layers)
 
 
 class LearnedFlowTests(unittest.TestCase):
@@ -108,6 +110,40 @@ class LearnedFlowTests(unittest.TestCase):
     def test_association_is_missing_for_constant_or_tiny_samples(self):
         self.assertIsNone(association(np.ones(20), np.arange(20), np.ones(20, bool)))
         self.assertEqual(association(np.arange(20), np.arange(20), np.ones(20, bool)), 1)
+
+    def test_background_parity_uses_joint_callback_composition(self):
+        import torch
+        from nag.model.background_image_plane_scene_node_3d import BackgroundImagePlaneSceneNode3D
+
+        background = MagicMock(spec=BackgroundImagePlaneSceneNode3D)
+        foreground = object()
+
+        class FakeModel:
+            objects = [foreground, background]
+            device = torch.device('cpu')
+
+            def get_background_plane(self):
+                return background
+
+            def generate_outputs(self, config, **kwargs):
+                objects = kwargs['objects']
+                if objects is None:
+                    return torch.zeros((1, 3, 2, 2))
+                if objects != [[foreground], [background]]:
+                    raise AssertionError('Background must be rendered in the saved joint composition')
+                return torch.zeros((2, 1, 4, 2, 2))
+
+        with tempfile.TemporaryDirectory(prefix='autowork_') as directory:
+            folder = Path(directory)
+            saved = folder / 'saved.png'
+            Image.fromarray(np.zeros((2, 2, 3), dtype=np.uint8)).save(saved)
+            job = {'indices': [0], 'frames': [86], 'size': [2, 2],
+                   'layers': [{'composite': str(saved), 'background': str(saved)}]}
+            render_verification(FakeModel(), object(), torch.tensor([0.]), job, folder,
+                                {'verify_frames': 1, 'parity_mean_bytes': .5, 'parity_p99_bytes': 2.})
+            report = json.loads((folder / 'verification.json').read_text())
+        self.assertTrue(report['passed'])
+        self.assertIn('joint', report['background_render_policy'])
 
     def test_input_change_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:

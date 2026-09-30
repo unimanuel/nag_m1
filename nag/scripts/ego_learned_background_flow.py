@@ -147,16 +147,32 @@ def jobs_from_manifest(args):
 
 def render_verification(model, config, times, job, folder, settings):
     import torch
+    from nag.model.background_image_plane_scene_node_3d import BackgroundImagePlaneSceneNode3D
+    from nag.model.background_plane_scene_node_3d import BackgroundPlaneSceneNode3D
+
+    # The final callback saves object layers from one joint multi-composition
+    # query. A standalone [background] query can take a different object-mask
+    # path and is not, in general, byte-equivalent to that saved layer.
+    saved_objects = [o for o in model.objects if not isinstance(o, BackgroundPlaneSceneNode3D)
+                     or isinstance(o, BackgroundImagePlaneSceneNode3D)]
+    background = model.get_background_plane()
+    if sum(o is background for o in saved_objects) != 1:
+        raise ValueError('Exactly one saved background object is required')
+    background_index = next(i for i, o in enumerate(saved_objects) if o is background)
+    compositions = [[o] for o in saved_objects]
     take = job['indices']
     indices = np.unique(np.asarray(take)[np.linspace(0, len(take)-1, min(settings['verify_frames'], len(take))).round().astype(int)])
     rows = []
     for index in indices:
         # Same quantization as NAGCallback: clamp then truncate, not round.
         t = times[index:index+1]
-        for layer, objects in [('composite', None), ('background', [model.get_background_plane()])]:
-            output = model.generate_outputs(config, t=t, resolution=job['size'], objects=objects,
-                                            progress_bar=False, device=model.device)
-            a = (output[0, :3]*255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy()
+        composite = model.generate_outputs(config, t=t, resolution=job['size'], objects=None,
+                                           progress_bar=False, device=model.device)
+        layers = model.generate_outputs(config, t=t, resolution=job['size'], objects=compositions,
+                                        progress_bar=False, device=model.device)
+        for layer, output in [('composite', composite[0, :3]),
+                              ('background', layers[background_index, 0, :3])]:
+            a = (output*255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy()
             saved = image(job['layers'][index][layer])
             measurements = parity(a, saved, settings['parity_mean_bytes'], settings['parity_p99_bytes'])
             rows.append(dict(local_frame=int(index), frame=job['frames'][index], layer=layer, **measurements))
@@ -168,7 +184,8 @@ def render_verification(model, config, times, job, folder, settings):
             print(f'  parity {index:03d} {layer}: mean={measurements["mean_bytes"]:.4g}, '
                   f'p99={measurements["p99_bytes"]:.4g}, passed={measurements["passed"]}', flush=True)
     passed = all(r['passed'] for r in rows)
-    write_json(folder / 'verification.json', dict(passed=passed, thresholds=settings, rows=rows))
+    write_json(folder / 'verification.json', dict(passed=passed, thresholds=settings, rows=rows,
+        background_render_policy='joint callback-equivalent per-object composition'))
     write_csv(folder / 'verification.csv', rows)
     if not passed:
         raise RuntimeError('Saved-image reproduction failed; flow analysis deliberately not performed. See verification.json.')
