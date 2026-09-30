@@ -50,6 +50,23 @@ not necessary for the initial wide-versus-narrow investigation. `--families`
 also supports AR3, raw v4, Moderate-Y and radius-scale v1 if present in the
 completed prior diagnostic's inventory.
 
+For the existing upright-pole experiment, use the separate source catalog and
+an `autowork_` output folder. This compares repeat 01 of the upright mapping
+on the fixed legacy-floor geometry with the completed upright-aware floor fit;
+it does not create new geometry or train:
+
+```bash
+python nag/scripts/ego_learned_background_flow.py \
+  --upright-sources reports/2026-09-28_upright_comparison.sources.json \
+  --sequences W191_0_40 W254_0_37 W254_139_195 \
+  --output /mnt/d/CGProjectData/waymo/diagnostics/autowork_upright_learned_flow_v1
+```
+
+The upright comparison uses the same grid, saved-image parity and learned-flow
+definitions as the original diagnostic. It compares completed checkpoints, not
+the untrained `autowork_` optimizer candidates; their actual learned flow can
+only be measured after training.
+
 ## Reproduction gate
 
 Before reading flow, the loader renders three evenly spaced frames at the

@@ -466,6 +466,7 @@ def plot_comparison(output, candidate, reference, ca, ra):
 def comparison_outputs(output, jobs):
     rows, comparisons = [], []
     finished = []
+    upright_cohort = any(job['family'] in ('upright_fixed', 'upright_fit') for job in jobs)
     for job in jobs:
         folder = output / job['id']
         if not completed_result(folder, job):
@@ -474,10 +475,11 @@ def comparison_outputs(output, jobs):
             rows.extend(csv.DictReader(f))
         finished.append(job)
     for candidate in finished:
-        if candidate['family'] == 'sphere':
+        if candidate['family'] == 'sphere' or (upright_cohort and candidate['family'] != 'upright_fit'):
             continue
+        reference_families = ('upright_fixed',) if upright_cohort else ('sphere', 'reprojection_v1')
         references = [j for j in finished if j['sequence'] == candidate['sequence'] and j['mode'] == candidate['mode']
-                      and j['family'] in ('sphere', 'reprojection_v1') and j['family'] != candidate['family']]
+                      and j['family'] in reference_families and j['family'] != candidate['family']]
         with np.load(output / candidate['id'] / 'fields.npz', allow_pickle=False) as ca:
             for reference in references:
                 with np.load(output / reference['id'] / 'fields.npz', allow_pickle=False) as ra:
@@ -529,6 +531,10 @@ def comparison_outputs(output, jobs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inventory', type=Path, default=Path('/mnt/d/CGProjectData/waymo/diagnostics/texture_flow_v1/manifest.json'))
+    parser.add_argument('--upright-sources', type=Path,
+                        help='Use completed fixed-geometry upright and upright-aware-fit runs from this source report')
+    parser.add_argument('--upright-families', nargs='+', choices=('upright_fixed', 'upright_fit'),
+                        default=['upright_fixed', 'upright_fit'])
     parser.add_argument('--output', type=Path, default=Path('/mnt/d/CGProjectData/waymo/diagnostics/learned_background_flow_v1'))
     parser.add_argument('--sequences', nargs='+', choices=SEQUENCES, default=DEFAULT_SEQUENCES)
     parser.add_argument('--families', nargs='+', choices=['sphere', 'reprojection_v1', 'legacy_floor', 'reprojection_new_radius_scale_v1', 'ar3', 'raw_v4', 'moderate_y'], default=DEFAULT_FAMILIES)
@@ -562,7 +568,17 @@ def main():
             or (args.max_frames is not None and args.max_frames < 1)
             or (args.limit_jobs is not None and args.limit_jobs < 1)):
         parser.error('Invalid nonpositive setting, or stride smaller than four pixels')
-    jobs = jobs_from_manifest(args)
+    if args.upright_sources:
+        from autowork_upright_flow_inventory import jobs_from_upright_sources
+        jobs = jobs_from_upright_sources(args)
+        inventory_source = args.upright_sources
+        policy = ('Read-only completed upright checkpoints; fixed legacy-fit geometry versus '
+                  'upright-aware fit; callback-equivalent parity before learned flow')
+    else:
+        jobs = jobs_from_manifest(args)
+        inventory_source = args.inventory
+        policy = ('Read-only final checkpoints; parity before flow; fixed image grid; '
+                  'background mask interior is not a semantic/static label')
     settings = {k: getattr(args, k) for k in ('stride', 'difference_step', 'boundary_width', 'verify_frames',
                 'parity_mean_bytes', 'parity_p99_bytes', 'max_frames')}
     settings['floor_repeat_policy'] = 'Explicit repeat numbers; no best-quality checkpoint selection or repeat-mean substitution'
@@ -570,10 +586,12 @@ def main():
     code_paths = [Path(__file__), REPO/'nag/learned_flow_diagnostics.py', REPO/'nag/run/nag_runner.py',
                   REPO/'nag/config/nag_config.py', REPO/'nag/dataset/nag_dataset.py',
                   REPO/'nag/diagnostics/parallax_io.py', REPO/'nag/diagnostics/parallax_core.py']
+    if args.upright_sources:
+        code_paths.append(REPO/'nag/scripts/autowork_upright_flow_inventory.py')
     code = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in
             code_paths + sorted((REPO/'nag/model').glob('*.py'))}
-    manifest = dict(schema=1, inventory=file_record(args.inventory, True), settings=settings, jobs=jobs, code=code,
-                    policy='Read-only final checkpoints; parity before flow; fixed image grid; background mask interior is not a semantic/static label',
+    manifest = dict(schema=1, inventory=file_record(inventory_source, True), settings=settings, jobs=jobs, code=code,
+                    policy=policy,
                     complete=False)
     print(f'{len(jobs)} checkpoint diagnostics (NO training):', flush=True)
     for job in jobs:

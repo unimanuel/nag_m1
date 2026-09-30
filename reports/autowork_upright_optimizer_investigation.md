@@ -19,6 +19,38 @@ better than the old upright-aware wide fits in all three problem intervals
 (regular and Visible-UV). This is useful motivation but not proof that the new
 untrained geometries will share that quality.
 
+## Checkpoint learned-flow evidence
+
+The checkpoint diagnostic now reproduces the **actual** saved callback layer,
+not a standalone background query. All 12 jobs in the recovered W254 86–137 /
+139–195 legacy cohort passed that parity gate. A separate 12-job upright cohort
+compared already completed upright-pole trainings: fixed narrow legacy-fit
+geometry versus the old upright-aware wide fit, each at seed 42 and with the
+same YAML. All 12 upright jobs passed composite and background-layer parity.
+
+The table gives fixed-narrow minus old-wide changes. Error and flow percentages
+refer to the same full background-mask pixel grid and every frame; PSNR is
+the saved final training metric in dB. These are **existing** checkpoints,
+not the new candidate geometries.
+
+| Interval | UV mode | Background RGB MAE | Image-pixel flow gradient | Raw UV-flow gradient | PSNR |
+|---|---|---:|---:|---:|---:|
+| W191 0–40 | regular | −6.8% | −14.1% | +21.7% | +0.351 |
+| W191 0–40 | Visible-UV | −8.8% | −14.9% | +22.5% | +0.417 |
+| W254 0–37 | regular | −8.3% | −14.4% | +15.8% | +0.302 |
+| W254 0–37 | Visible-UV | −11.3% | −14.8% | +9.7% | +0.378 |
+| W254 139–195 | regular | −8.6% | −17.4% | +35.3% | +0.507 |
+| W254 139–195 | Visible-UV | −8.9% | −14.2% | +39.1% | +0.455 |
+
+SSIM and LPIPS also favor fixed-narrow geometry in all six comparisons.
+But the within-frame spatial rank correlation between *changes* in image-pixel
+flow gradient and RGB error is only about 0.01–0.03. Thus a smaller flow
+gradient is a useful cohort-level observation, not a validated local causal
+loss for the new optimizer. Raw UV-flow gradient moves in the opposite
+direction, so penalizing it would have selected the worse wide treatment.
+Detailed fields, plots, parity records and matched comparisons are in
+`D:\CGProjectData\waymo\diagnostics\autowork_upright_learned_flow_v1`.
+
 ## Two axis-neutral candidate recipes
 
 Let \(G=(c,R,a,b,d)\) be the ellipsoid with center \(c\), fixed source rotation
