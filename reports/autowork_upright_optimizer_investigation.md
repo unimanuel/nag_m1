@@ -138,3 +138,7 @@ Visible-UV (12 trainings); `--modes regular` restricts it to six. Its dry run
 prints every command without creating a run directory. The other four
 intervals need no new training for these recipes because their geometry is
 exactly the existing original upright-pole treatment.
+Each selected subset gets its own deterministic `autowork_` run root by default,
+so a three-job first pass and a later larger batch do not conflict. Repeating
+the same selection resumes/skips completed attempts; selecting different jobs
+does not silently change an existing manifest.

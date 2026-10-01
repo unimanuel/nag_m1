@@ -84,6 +84,16 @@ def jobs_for(args):
     return jobs
 
 
+def default_output_root(args):
+    base = REPO / 'runs/autowork_upright_optimizer_validation'
+    selection = [list(args.sequences), list(args.recipes), list(args.modes)]
+    full = [list(DEFAULT_SEQUENCES), list(RECIPES), ['regular', 'visuv']]
+    if selection == full:
+        return base
+    digest = hashlib.sha256(json.dumps(selection).encode()).hexdigest()[:8]
+    return base.with_name(f'{base.name}_{"-".join(args.modes)}_{digest}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sequences', nargs='+', choices=list(SEQUENCES),
@@ -94,14 +104,14 @@ def main():
     parser.add_argument('--ellipsoid-root', type=Path,
                         default=Path('/mnt/d/CGProjectData/waymo/ellipsoids'))
     parser.add_argument('--output-root', type=Path,
-                        default=REPO / 'runs/autowork_upright_optimizer_validation')
+                        help='Default is autowork-prefixed and unique for each selected subset')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     if any(len(values) != len(set(values)) for values in
            (args.sequences, args.recipes, args.modes)):
         parser.error('duplicate sequences, recipes or modes are not allowed')
     jobs = jobs_for(args)
-    root = args.output_root.resolve()
+    root = (args.output_root or default_output_root(args)).resolve()
     if not root.name.startswith('autowork_'):
         parser.error('output-root folder name must begin with autowork_')
     signature = {str(p.relative_to(REPO)): sha(p) for p in
