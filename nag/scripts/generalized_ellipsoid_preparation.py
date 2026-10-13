@@ -19,7 +19,7 @@ from preparation.storage import code_signature, recipe, write_json, Stage
 from preparation.pipeline import prepare, reference_stage, signature, RAW_PYTHON
 from preparation.verification import verify, release_gate
 
-DEFAULT_VERIFICATION = Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_release_v3')
+DEFAULT_VERIFICATION = Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_release_v4')
 DEFAULT_FIXTURES = Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_v1/ego_fixtures.json')
 DEFAULT_OUTPUT = Path('/mnt/d/CGProjectData/waymo/ellipsoids/autowork_generalized_legacy_v1')
 CLOUD_ROOT = Path('/mnt/d/CGProjectData/waymo/pointclouds')

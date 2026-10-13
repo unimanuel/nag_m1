@@ -19,8 +19,9 @@ sys.path.insert(0,str(REPO/'nag'))
 sys.path.insert(1,str(REPO/'nag/scripts'))
 from preparation.jobs import PreparationJob, discover, audit, select, SPHERE
 from preparation.reference import initialize_runner, mapping_from_diagnostic, completed_reference
-from preparation.storage import Stage, recipe, write_json
-from preparation.verification import geometry_difference, compare_arrays, compare_mapping, release_gate
+from preparation.storage import Stage, recipe, write_json, code_signature
+from preparation.verification import (geometry_difference, compare_arrays, compare_mapping,
+    release_gate, acceptance_policy, compare_fit_diagnostics)
 from preparation.compatibility import allowed_preparation_change, PATH, OLD, NEW
 from diagnostics.parallax_observations import targets_for
 import generalized_ellipsoid_preparation as cli
@@ -233,6 +234,68 @@ class GeneralizedPreparationTests(unittest.TestCase):
         b=copy.deepcopy(a);b['fit']['radii'][0]+=1e-7
         geometry_difference(a,b)
         with self.assertRaises(ValueError):geometry_difference(a,b,exact=True)
+
+    def test_approved_millimeter_geometry_tolerance_is_not_a_rotation_allowance(self):
+        a={'fit':{'center':[0.,0.,0.],'radii':[30.,20.,10.],'rotation_columns':np.eye(3).tolist()}}
+        b=copy.deepcopy(a);b['fit']['center'][0]=.0008;b['fit']['radii'][1]+=.0008
+        geometry_difference(a,b)
+        with self.assertRaises(ValueError):geometry_difference(a,b,exact=True)
+        b['fit']['center'][0]=.0011
+        with self.assertRaises(ValueError):geometry_difference(a,b)
+        b=copy.deepcopy(a);b['fit']['rotation_columns'][0][1]=2e-6
+        with self.assertRaises(ValueError):geometry_difference(a,b)
+        b=copy.deepcopy(a);b['fit']['center'][0]=float('inf')
+        with self.assertRaises(ValueError):geometry_difference(b,b)
+
+    def test_diagnostic_gate_rejects_loss_visibility_safety_and_sampling_changes(self):
+        distribution={'count':200,'finite_count':200,'invalid_count':0,
+                      'mean':1.,'median':1.,'p90':1.,'p95':1.}
+        metrics={'pixel_error':copy.deepcopy(distribution),'camera_angle_deg':copy.deepcopy(distribution),
+            'absolute_log_depth_error':copy.deepcopy(distribution),'weighted_data_loss':1.,
+            'reprojection_huber_loss':.85,'depth_huber_loss':1.,'radius_excess_huber_loss':0.,
+            'valid_pair_fraction':1.,'valid_depth_fraction':1.,'max_camera_normalized_radius':.6,
+            'conservative_camera_clearance_m':7.,'minimum_axis_radius_m':10.,'maximum_axis_ratio':3.}
+        stats={'loss':.001,'below_floor_fraction':.1,'ratio_median':.8}
+        original={'fit':{'sampling_floor':{'original_combined_objective':1.1,'final_combined_objective':1.,
+            'full_original':copy.deepcopy(metrics),'full_final':copy.deepcopy(metrics),
+            'full_sampling':{'original':copy.deepcopy(stats),'final':copy.deepcopy(stats)}}}}
+        cfg=recipe()['reprojection']
+        self.assertTrue(compare_fit_diagnostics(original,original,cfg)['passed'])
+        mutations=[('full_final','weighted_data_loss',1.001),('full_final','valid_pair_fraction',.99),
+                   ('full_final','max_camera_normalized_radius',.651),
+                   ('full_final','conservative_camera_clearance_m',5.999),
+                   ('full_final','minimum_axis_radius_m',7.999),('full_final','maximum_axis_ratio',10.001),
+                   ('full_final','depth_huber_loss',float('nan'))]
+        for stage,field,value in mutations:
+            changed=copy.deepcopy(original);changed['fit']['sampling_floor'][stage][field]=value
+            self.assertFalse(compare_fit_diagnostics(changed,original,cfg)['passed'])
+        changed=copy.deepcopy(original);changed['fit']['sampling_floor']['full_final']['pixel_error']['count']=201
+        self.assertFalse(compare_fit_diagnostics(changed,original,cfg)['passed'])
+        changed=copy.deepcopy(original);changed['fit']['sampling_floor']['full_final']['pixel_error']['p90']+=.01
+        self.assertFalse(compare_fit_diagnostics(changed,original,cfg)['passed'])
+        changed=copy.deepcopy(original);changed['fit']['sampling_floor']['full_sampling']['final']['loss']+=.01
+        self.assertFalse(compare_fit_diagnostics(changed,original,cfg)['passed'])
+        changed=copy.deepcopy(original);changed['fit']['sampling_floor']['full_final']['weighted_data_loss']=1.03
+        self.assertIn('Unchanged 2% full-observation data-loss budget failed',compare_fit_diagnostics(changed,original,cfg)['errors'])
+
+    def test_release_requires_current_policy_and_both_complete_diagnostic_layers(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_gate_test_') as d:
+            root=Path(d);fixture=root/'fixtures.json';labels=[f'test{i}'for i in range(7)]
+            write_json(fixture,{'rows':[{'label':s}for s in labels]})
+            report={'released':True,'code':code_signature(),'recipe':recipe(),
+                    'fixture_manifest':str(fixture),'fixture_sha256':hashlib.sha256(fixture.read_bytes()).hexdigest(),
+                    'acceptance_policy':acceptance_policy(),
+                    **{mode:{label:{'passed':True,'diagnostic_check':{'passed':True}}for label in labels}
+                       for mode in ['cached','end_to_end']}}
+            p=root/'verification.json';write_json(p,report);release_gate(p)
+            for change in ['old_policy','no_diagnostics','missing_interval','failed_layer']:
+                altered=copy.deepcopy(report)
+                if change=='old_policy':altered.pop('acceptance_policy')
+                if change=='no_diagnostics':altered['cached']['test0'].pop('diagnostic_check')
+                if change=='missing_interval':altered['end_to_end'].pop('test6')
+                if change=='failed_layer':altered['end_to_end']['test0']['passed']=False
+                write_json(p,altered)
+                with self.assertRaises(ValueError):release_gate(p)
 
     def test_gate_cannot_be_bypassed_by_cached_only_report(self):
         with tempfile.TemporaryDirectory(prefix='autowork_gate_test_') as d:

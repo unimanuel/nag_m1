@@ -11,13 +11,31 @@ from diagnostics.parallax_io import snapshot
 from fit_reprojection_ellipsoid import _source_geometry
 
 
+def acceptance_policy():
+    """Explicit user-approved replay policy; never changes fitter settings."""
+    return {'version': 'numerical_equivalence_1mm_v1',
+            'approval': 'User approved 1 mm optimized-center/radius tolerance on 2026-10-13',
+            'geometry': {'rtol': 1e-6, 'center_radius_atol_m': 1e-3, 'rotation_atol': 1e-6},
+            'preserved_geometry': 'exact', 'observations': 'exact dtype/order/values',
+            'sphere_reference_and_mapping': 'exact',
+            'objectives': {'rtol': 1e-6, 'atol': 1e-6},
+            'distributions': {'rtol': 1e-6, 'pixel_atol': 1e-3,
+                              'angle_deg_atol': 1e-4, 'log_depth_atol': 1e-4},
+            'sampling_statistics': {'rtol': 1e-5, 'atol': 1e-6},
+            'safety': 'unchanged recipe limits and 2% full-observation data-loss budget'}
+
+
 def geometry_difference(actual, expected, exact=False):
     a, b = _source_geometry(actual), _source_geometry(expected)
     errors,failures = {},[]
     for key in ('center', 'radii', 'rotation'):
+        if not np.isfinite(a[key]).all() or not np.isfinite(b[key]).all():
+            errors[key] = None
+            failures.append(key)
+            continue
         errors[key] = float(np.max(np.abs(a[key]-b[key])))
         same = np.array_equal(a[key], b[key]) if exact else np.allclose(a[key], b[key],
-            rtol=0 if key == 'rotation' else 1e-6, atol=1e-6 if key == 'rotation' else 1e-4)
+            rtol=0 if key == 'rotation' else 1e-6, atol=1e-6 if key == 'rotation' else 1e-3)
         if not same:
             failures.append(key)
     if failures:
@@ -25,6 +43,59 @@ def geometry_difference(actual, expected, exact=False):
         error.maximum_errors=errors
         raise error
     return errors
+
+
+def compare_fit_diagnostics(actual, expected, config):
+    """Require close losses/observations plus the original hard safety policy."""
+    policy = acceptance_policy()
+    a, b = actual['fit']['sampling_floor'], expected['fit']['sampling_floor']
+    errors, deltas = [], {}
+
+    def close(name, x, y, rtol=1e-6, atol=1e-6):
+        if x is None or y is None or not np.isfinite(x) or not np.isfinite(y):
+            errors.append(f'Nonfinite diagnostic: {name}')
+            return
+        deltas[name] = float(x-y)
+        if not np.isclose(x, y, rtol=rtol, atol=atol):
+            errors.append(f'Diagnostic parity failed: {name}; difference={x-y}')
+
+    for field in ['original_combined_objective', 'final_combined_objective']:
+        close(field, a[field], b[field], **policy['objectives'])
+    for stage in ['full_original', 'full_final']:
+        x, y = a[stage], b[stage]
+        for field in ['weighted_data_loss', 'reprojection_huber_loss', 'depth_huber_loss', 'radius_excess_huber_loss']:
+            close(stage+'.'+field, x[field], y[field], **policy['objectives'])
+        for field, atol in [('pixel_error', policy['distributions']['pixel_atol']),
+                            ('camera_angle_deg', policy['distributions']['angle_deg_atol']),
+                            ('absolute_log_depth_error', policy['distributions']['log_depth_atol'])]:
+            for count in ['count', 'finite_count', 'invalid_count']:
+                if x[field][count] != y[field][count]:
+                    errors.append(f'Observation diagnostic count changed: {stage}.{field}.{count}')
+            for stat in ['mean', 'median', 'p90', 'p95']:
+                close(stage+'.'+field+'.'+stat, x[field][stat], y[field][stat], atol=atol)
+        for field in ['valid_pair_fraction', 'valid_depth_fraction']:
+            if x[field] != 1. or x[field] != y[field]:
+                errors.append(f'Full-observation validity changed: {stage}.{field}')
+        # Safety allowances are the existing kernel's floating-point allowances,
+        # not the new 1 mm coordinate-equivalence allowance.
+        limits = [(x['max_camera_normalized_radius'], '<=', config['max_camera_normalized_radius']+1e-7),
+                  (x['conservative_camera_clearance_m'], '>=', config['minimum_camera_surface_distance']-1e-7),
+                  (x['minimum_axis_radius_m'], '>=', config['minimum_axis_radius']-1e-7),
+                  (x['maximum_axis_ratio'], '<=', config['max_axis_ratio']+1e-7)]
+        for value, operator, limit in limits:
+            if not np.isfinite(value) or (value > limit if operator == '<=' else value < limit):
+                errors.append(f'Unchanged safety check failed: {stage}: {value} {operator} {limit}')
+    for stage in ['original', 'final']:
+        for field in ['loss', 'below_floor_fraction', 'ratio_median']:
+            close('full_sampling.'+stage+'.'+field, a['full_sampling'][stage][field],
+                  b['full_sampling'][stage][field], **policy['sampling_statistics'])
+    limit = a['full_original']['weighted_data_loss']*1.02+1e-6
+    if a['full_final']['weighted_data_loss'] > limit:
+        errors.append('Unchanged 2% full-observation data-loss budget failed')
+    return {'passed': not errors, 'errors': errors, 'differences': deltas,
+            'full_data_loss_limit': limit,
+            'final_safety': {k:a['full_final'][k] for k in ['max_camera_normalized_radius',
+                'conservative_camera_clearance_m', 'minimum_axis_radius_m', 'maximum_axis_ratio']}}
 
 
 def verify_fixtures(path):
@@ -64,9 +135,11 @@ def verify(fixtures, root, cloud_root, level='all', selected=()):
         raise ValueError('Unknown/duplicate ego verification selection')
     report_path = Path(root)/'verification.json'
     report = json.loads(report_path.read_text()) if report_path.exists() else {
-        'schema': 1, 'fixture_manifest': str(fixtures), 'fixture_sha256': sha(fixtures),
-        'code': code_signature(), 'recipe': recipe(), 'cached': {}, 'end_to_end': {}}
-    if report['code'] != code_signature() or report['fixture_sha256'] != sha(fixtures) or report['recipe'] != recipe():
+        'schema': 2, 'fixture_manifest': str(fixtures), 'fixture_sha256': sha(fixtures),
+        'code': code_signature(), 'recipe': recipe(), 'acceptance_policy': acceptance_policy(),
+        'cached': {}, 'end_to_end': {}}
+    if (report['code'] != code_signature() or report['fixture_sha256'] != sha(fixtures)
+            or report['recipe'] != recipe() or report.get('acceptance_policy') != acceptance_policy()):
         # Keep old reports: a new code revision must explicitly use another
         # verification directory rather than resetting a previous pass.
         raise ValueError('Verification report belongs to another code/input revision; select a new --verification-root')
@@ -101,6 +174,8 @@ def verify(fixtures, root, cloud_root, level='all', selected=()):
                 if preserved != (row['floor_version'] == 2):
                     failures.append('The v2 preservation/refinement decision changed')
                 floor_diff = compare(floor_doc, historical, exact=preserved)
+                diagnostic_check = compare_fit_diagnostics(floor_doc, historical, recipe()['reprojection'])
+                failures.extend(diagnostic_check['errors'])
                 if mode == 'end_to_end':
                     raw_diff = compare(json.loads(Path(result['raw_v4']).read_text()),
                                        json.loads(Path(row['raw_v4']).read_text()))
@@ -113,7 +188,8 @@ def verify(fixtures, root, cloud_root, level='all', selected=()):
                 old_objective = historical['fit']['sampling_floor']['full_final']['weighted_data_loss']
                 report[mode][row['label']] = {'passed': not failures, 'errors':failures, 'arrays': shapes, 'reprojection_maximum_errors': reprojection,
                     'floor_maximum_errors': floor_diff, 'raw_maximum_errors': raw_diff, 'preserved': preserved,
-                    'objective_difference': objective-old_objective, 'result': result}
+                    'objective_difference': objective-old_objective, 'diagnostic_check': diagnostic_check,
+                    'result': result}
                 print(f'[{"FAIL" if failures else "PASS"}] {mode} {row["label"]}; floor differences={floor_diff}', flush=True)
             except Exception as e:
                 report[mode][row['label']] = {'passed': False, 'error': str(e)}
@@ -131,10 +207,12 @@ def release_gate(path):
         raise ValueError('Missing current seven-interval release report; run verify_ego_ellipsoid_preparation.sh first')
     report = json.loads(Path(path).read_text())
     if (not report.get('released') or report['code'] != code_signature() or report['recipe'] != recipe()
+            or report.get('acceptance_policy') != acceptance_policy()
             or sha(report['fixture_manifest']) != report['fixture_sha256']):
         raise ValueError('Static preparation/training requires the current full seven-interval ego compatibility gate')
     labels={r['label']for r in json.loads(Path(report['fixture_manifest']).read_text())['rows']}
-    if len(labels)!=7 or any(set(report[m])!=labels or not all(r.get('passed')for r in report[m].values())
+    if len(labels)!=7 or any(set(report[m])!=labels or not all(r.get('passed') and
+                            r.get('diagnostic_check',{}).get('passed') for r in report[m].values())
                             for m in ['cached','end_to_end']):
         raise ValueError('The release gate is incomplete')
     return report
