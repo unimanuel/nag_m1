@@ -20,7 +20,7 @@ sys.path.insert(1,str(REPO/'nag/scripts'))
 from preparation.jobs import PreparationJob, discover, audit, select, SPHERE
 from preparation.reference import initialize_runner, mapping_from_diagnostic, completed_reference
 from preparation.storage import Stage, recipe, write_json
-from preparation.verification import geometry_difference, compare_arrays, release_gate
+from preparation.verification import geometry_difference, compare_arrays, compare_mapping, release_gate
 from preparation.compatibility import allowed_preparation_change, PATH, OLD, NEW
 from diagnostics.parallax_observations import targets_for
 import generalized_ellipsoid_preparation as cli
@@ -120,6 +120,12 @@ class GeneralizedPreparationTests(unittest.TestCase):
         self.assertEqual(mapping['resolution_hw'],[640,1280]);self.assertTrue(mapping['y_flip'])
         diag['visible_uv_texture']['enabled']=True
         with self.assertRaises(ValueError):mapping_from_diagnostic(diag,{})
+
+    def test_mapping_parity_rejects_changed_resolution_even_if_floor_ratio_could_cancel(self):
+        mapping={'resolution_hw':[640,1280],'visible_uv':{'enabled':False},'y_flip':False}
+        compare_mapping(mapping,copy.deepcopy(mapping))
+        changed=copy.deepcopy(mapping);changed['resolution_hw']=[1280,2560]
+        with self.assertRaises(ValueError):compare_mapping(changed,mapping)
 
     def test_initialization_never_calls_build_trainer_train_or_checkpoints(self):
         runner=MagicMock();model=initialize_runner(runner)
@@ -233,6 +239,44 @@ class GeneralizedPreparationTests(unittest.TestCase):
             p=Path(d)/'verification.json';p.write_text(json.dumps({'released':False}))
             with self.assertRaises(ValueError):release_gate(p)
 
+    def test_missing_release_report_is_an_explicit_blocker(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_gate_test_') as d:
+            with self.assertRaisesRegex(ValueError,'Missing current'):release_gate(Path(d)/'verification.json')
+
+    def test_reference_audit_distinguishes_absence_from_unvalidated_candidates(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_reference_test_') as d:
+            base=Path(d);root=dataset(base);regular,_=configs(base,root)
+            job=discover(config_paths=[regular])[0];output=base/'autowork_output'
+            self.assertEqual(cli.reference_availability(job,output,{})['status'],'native_initialization_required')
+            run=base/'run'
+            self.assertEqual(cli.reference_availability(job,output,{job.uid:str(run)})['status'],
+                             'supplied_candidate_missing_files')
+            for name in ['training_config.yaml','exit_000.txt','initial/background_diagnostics/sphere_geometry.txt']:
+                p=run/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('candidate, not validated')
+            available=cli.reference_availability(job,output,{job.uid:str(run)})
+            self.assertEqual(available['status'],'supplied_candidate')
+            self.assertEqual(available['reuse_validation'],'required before reuse')
+            self.assertFalse(output.exists())
+
+    def test_completed_training_cannot_reuse_another_dataset_root_or_calibration(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_training_test_') as d:
+            base=Path(d);root=dataset(base);regular,_=configs(base,root)
+            c=yaml.safe_load(regular.read_text());c['NAGConfig']['data_path']='/another/dataset'
+            run=base/'run';run.mkdir();(run/'training_config.yaml').write_text(yaml.safe_dump(c))
+            with patch('paper_plane_baselines.basic_completed',return_value={}):
+                with self.assertRaisesRegex(ValueError,'dataset root'):
+                    cli.training_completed(run,{'data_dir':str(root)})
+            c['NAGConfig']['data_path']=str(root)
+            for field,suffix in cli.DATA_FIELDS.items():c['NAGConfig'][field]=str(root/suffix)
+            camera=json.loads((root/'waymo_pose_config_no_distortion.json').read_text())
+            c['NAGConfig']['pinhole_camera_config']=copy.deepcopy(camera)
+            c['NAGConfig']['pinhole_camera_config']['focal_length']=2.
+            (run/'training_config.yaml').write_text(yaml.safe_dump(c))
+            with patch('paper_plane_baselines.basic_completed',return_value={}):
+                with self.assertRaisesRegex(ValueError,'calibration mismatch'):
+                    cli.training_completed(run,{'data_dir':str(root),'size':(16,12),
+                        'pose_path':str(root/'waymo_pose_config_no_distortion.json')})
+
     def test_compatibility_allowance_is_exact_and_preparation_only(self):
         self.assertTrue(allowed_preparation_change(PATH,OLD,NEW))
         self.assertFalse(allowed_preparation_change('nag/model/nag_model.py',OLD,NEW))
@@ -260,10 +304,14 @@ class GeneralizedPreparationTests(unittest.TestCase):
     def test_six_training_commands_have_fixed_geometry_and_both_layouts(self):
         for mode in ['regular','visuv']:
             for repeat in [1,2,3]:
-                cmd=cli.training_command({'id':f'id{repeat}','config':f'{mode}.yaml','geometry':'ellipsoid.json'},Path('out'))
+                cmd=cli.training_command({'id':f'id{repeat}','config':f'{mode}.yaml','geometry':'ellipsoid.json',
+                                          'data_dir':'/prepared/dataset','pose_path':'/prepared/calibration.json'},Path('out'))
                 self.assertEqual(cmd[cmd.index('--background-ellipsoid-scale-margin')+1],'0')
                 self.assertEqual(cmd[cmd.index('--background-ellipsoid-texture-orientation')+1],'legacy')
                 self.assertFalse(any('sphere-radius' in x for x in cmd))
+                self.assertEqual(cmd[cmd.index('--data-path')+1],'/prepared/dataset')
+                self.assertEqual(cmd[cmd.index('--pinhole-camera-config')+1],'/prepared/calibration.json')
+                self.assertEqual(cmd[cmd.index('--images-path')+1],'/prepared/dataset/images_undistorted')
 
 
 if __name__=='__main__':unittest.main()

@@ -19,11 +19,31 @@ from preparation.storage import code_signature, recipe, write_json, Stage
 from preparation.pipeline import prepare, reference_stage, signature, RAW_PYTHON
 from preparation.verification import verify, release_gate
 
-DEFAULT_VERIFICATION = Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_release_v2')
+DEFAULT_VERIFICATION = Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_release_v3')
 DEFAULT_FIXTURES = Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_v1/ego_fixtures.json')
 DEFAULT_OUTPUT = Path('/mnt/d/CGProjectData/waymo/ellipsoids/autowork_generalized_legacy_v1')
 CLOUD_ROOT = Path('/mnt/d/CGProjectData/waymo/pointclouds')
 ELLIPSOID_TYPE = 'nag.model.view_dependent_background_image_ellipsoid_scene_node_3d.ViewDependentBackgroundImageEllipsoidSceneNode3D'
+
+DATA_FIELDS = {'images_path':'images_undistorted','masks_path':'masks','depths_path':'depth',
+               'boxes_path':'boxes','boxes_object_id_mask_mapping_path':'box_id_mapping.json',
+               'mask_ids_filter_path':'mask_indices_filter.json'}
+
+
+def reference_availability(job, output_root, sphere_runs):
+    """Read-only inventory, not a replacement for full reuse validation."""
+    if job.uid in sphere_runs:
+        run=Path(sphere_runs[job.uid])
+        present=all((run/p).is_file()for p in ['training_config.yaml','exit_000.txt',
+                    'initial/background_diagnostics/sphere_geometry.txt'])
+        return {'status':'supplied_candidate' if present else 'supplied_candidate_missing_files',
+                'path':str(run),'reuse_validation':'required before reuse'}
+    manifest=Path(output_root)/job.uid/'reference/stage.json'
+    if manifest.exists():
+        recorded=json.loads(manifest.read_text())
+        return {'status':'prepared_candidate' if Path(recorded['result']).is_file() else 'prepared_candidate_missing_file',
+                'path':recorded['result'],'reuse_validation':'input/recipe/artifact hashes checked before reuse'}
+    return {'status':'native_initialization_required','reuse_validation':'no supplied or prepared reference'}
 
 
 def cloud_commands(jobs, raw_root, cloud_root):
@@ -70,15 +90,20 @@ def training_jobs(jobs, preparation_root, cloud_root=CLOUD_ROOT):
                 result.append({'id': f'autowork_{job.uid}_ellipsoid_{mode}_seed42_repeat{repeat:02d}',
                     'label':job.label, 'uid':job.uid, 'mode':mode, 'repeat':repeat, 'seed':42,
                     'frame_count':len(job.frames), 'config':cfg, 'config_sha256':sha(cfg),
+                    'data_dir':job.data_dir,'pose_path':job.pose_path,'size':list(job.size),
                     'geometry':record['floor'], 'geometry_sha256':sha(record['floor'])})
     return result
 
 
 def training_command(job, out):
-    return [sys.executable,str(REPO/'nag/scripts/run_nag.py'),'--config-path',job['config'],
+    command=[sys.executable,str(REPO/'nag/scripts/run_nag.py'),'--config-path',job['config'],
         '--background-plane-type',ELLIPSOID_TYPE,'--background-ellipsoid-path',job['geometry'],
         '--background-ellipsoid-scale-margin','0','--background-ellipsoid-texture-orientation','legacy',
-        '--seed','42','--name',job['id'],'--output-path',str(out)]
+        '--seed','42','--name',job['id'],'--output-path',str(out),
+        '--data-path',job['data_dir'],'--pinhole-camera-config',job['pose_path']]
+    for field,suffix in DATA_FIELDS.items():
+        command.extend(['--'+field.replace('_','-'),str(Path(job['data_dir'])/suffix)])
+    return command
 
 
 def training_completed(path, job):
@@ -86,6 +111,20 @@ def training_completed(path, job):
     result=basic_completed(path,job)
     if result is None:return None
     c=settings(path/'training_config.yaml')
+    def resolved(v):
+        while isinstance(v,dict):v=v['value']
+        return (REPO/v).resolve()
+    if resolved(c['data_path'])!=Path(job['data_dir']).resolve():
+        raise ValueError('Completed training used a different prepared dataset root')
+    for field,suffix in DATA_FIELDS.items():
+        if resolved(c[field])!=(Path(job['data_dir'])/suffix).resolve():
+            raise ValueError(f'Completed training input path mismatch: {field}')
+    import numpy as np
+    from diagnostics.parallax_io import intrinsics
+    calibration=json.loads(Path(job['pose_path']).read_text())
+    if (not np.array_equal(c['pinhole_camera_config']['position'],calibration['position']) or
+            not np.array_equal(intrinsics(c['pinhole_camera_config'],job['size']),intrinsics(calibration,job['size']))):
+        raise ValueError('Completed training calibration mismatch')
     ref=copy.deepcopy(settings(job['config']))
     ref.update(name=job['id'],background_plane_type=ELLIPSOID_TYPE,
                background_ellipsoid_scale_margin=0.,background_ellipsoid_texture_orientation='legacy',
@@ -115,7 +154,6 @@ def training_completed(path, job):
         raise ValueError('Unexpected ellipsoid size override or sphere clipping')
     from diagnostics.parallax_io import diagnostic
     from fit_reprojection_ellipsoid import _source_geometry
-    import numpy as np
     diag=diagnostic(path/'initial/background_diagnostics/ellipsoid_geometry.txt')
     wanted=_source_geometry(json.loads(Path(job['geometry']).read_text()))
     for key,field in [('center','center'),('radii','effective_radii'),('rotation','rotation_columns')]:
@@ -201,10 +239,12 @@ def main():
         return
     jobs=select(discover(args.config_dir or (None if args.config_paths else REPO/'config/waymo/autowork_paper-final'),
                          args.config_paths or (),data_root=args.data_root),args.intervals or ())
+    sphere_runs=json.loads(args.sphere_run_map.read_text()) if args.sphere_run_map else {}
     audits={j.uid:audit(j,args.cloud_root) for j in jobs}
     for j in jobs:
         a=audits[j.uid];print(f'{j.label} [{j.uid}]: ready={a["ready"]}; baseline={a["maximum_camera_baseline_m"]:.6f} m; '
-                             f'weak_parallax={a["weak_parallax"]}; missing={a["missing"]}',flush=True)
+                             f'weak_parallax={a["weak_parallax"]}; missing={a["missing"]}; '
+                             f'reference={reference_availability(j,args.output_root,sphere_runs)}',flush=True)
     if args.stage=='audit':return
     if args.stage=='clouds':
         for command in cloud_commands(jobs,args.raw_root,args.cloud_root):
@@ -217,7 +257,6 @@ def main():
         release_gate(args.verification_root/'verification.json')
     if args.stage=='train':
         train(jobs,args);return
-    sphere_runs=json.loads(args.sphere_run_map.read_text()) if args.sphere_run_map else {}
     if args.dry_run:
         print(f'{len(jobs)} geometry jobs; no files, reference initialization or fitting performed.');return
     args.output_root.mkdir(parents=True,exist_ok=True)

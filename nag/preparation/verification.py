@@ -50,6 +50,12 @@ def compare_arrays(old_path, new_path):
         return {key: list(old[key].shape) for key in old.files}
 
 
+def compare_mapping(actual, expected):
+    if actual != expected:
+        raise ValueError('Canonical sphere-reference mapping changed')
+    return actual
+
+
 def verify(fixtures, root, cloud_root, level='all', selected=()):
     fixture = verify_fixtures(fixtures)
     all_rows = fixture['rows']
@@ -87,6 +93,9 @@ def verify(fixtures, root, cloud_root, level='all', selected=()):
                 reprojection = compare(json.loads(Path(result['reprojection']).read_text()),
                                        json.loads(Path(row['reprojection']).read_text()))
                 floor_doc = json.loads(Path(result['floor']).read_text())
+                reference = json.loads(Path(result['sphere_reference']).read_text())
+                try:compare_mapping(reference['mapping'],row['mapping'])
+                except ValueError as e:failures.append(str(e))
                 historical = json.loads(Path(row['floor']).read_text())
                 preserved = bool(floor_doc['fit']['sampling_floor'].get('zero_floor_preserved'))
                 if preserved != (row['floor_version'] == 2):
@@ -95,7 +104,7 @@ def verify(fixtures, root, cloud_root, level='all', selected=()):
                 if mode == 'end_to_end':
                     raw_diff = compare(json.loads(Path(result['raw_v4']).read_text()),
                                        json.loads(Path(row['raw_v4']).read_text()))
-                    sphere = json.loads(Path(result['sphere_reference']).read_text())['geometry']
+                    sphere = reference['geometry']
                     if any(not np.array_equal(sphere[k], row['sphere'][k]) for k in ['center','radii','rotation']):
                         failures.append('Native initialization sphere reference changed at legacy diagnostic precision')
                 else:
@@ -118,6 +127,8 @@ def verify(fixtures, root, cloud_root, level='all', selected=()):
 
 
 def release_gate(path):
+    if not Path(path).is_file():
+        raise ValueError('Missing current seven-interval release report; run verify_ego_ellipsoid_preparation.sh first')
     report = json.loads(Path(path).read_text())
     if (not report.get('released') or report['code'] != code_signature() or report['recipe'] != recipe()
             or sha(report['fixture_manifest']) != report['fixture_sha256']):

@@ -22,11 +22,28 @@ checks the v2 preservation decisions, and uses `rtol=1e-6`, `atol=1e-4 m`
 for fitted centers/radii and `atol=1e-6` for rotations. Preserved arrays require
 exact equality. No automatic tolerance adjustment is implemented.
 
-The report is:
+The completed numerical replay report is:
 
 ```text
 D:\CGProjectData\waymo\diagnostics\autowork_generalized_preparation_release_v2\verification.json
 ```
+
+It checks all seven intervals in both layers: six pass, W191 0-40 fails strict
+floor-refinement replay. Every stored observation array, raw-v4 geometry,
+native diagnostic-precision sphere reference and reprojection geometry matches
+exactly. W254 139-195 has small final-floor deviations within the specified
+combined relative/absolute tolerance; the other successful floor geometries
+match exactly.
+Canonical mapping metadata was additionally checked read-only and matches
+exactly for all seven native references. The current verifier checks it
+explicitly rather than relying on an unchanged relative density ratio.
+
+Final audit/training-launcher hardening was made after that replay, without
+changing observation building, sphere initialization or numerical fitting.
+The default verification namespace is consequently a fresh
+`autowork_generalized_preparation_release_v3`, which has **not** been certified.
+The v2 report and all its artifacts remain unchanged; no metadata is rewritten
+to pretend the latest code was verified by an earlier revision.
 
 A failed report is not a training authorization. The checker collects the
 remaining independent comparisons but exits unsuccessfully and leaves
@@ -77,6 +94,9 @@ for a single diagnostic, not a substitute for the seven-interval gate.
 
 `DRY_RUN=1` or `--dry-run` performs read-only checks. It does not initialize
 models, fit geometry, download data, train, or create output files.
+Audit also distinguishes missing references, supplied/prepared candidates and
+the need for native initialization. A candidate's availability is not a claim
+that it passed the reuse checks; validation occurs before reuse.
 
 ### Point clouds
 
@@ -174,6 +194,9 @@ six trainings per interval, or 24 for these four W125 intervals. The geometry
 is identical between layouts, with legacy poles, zero runtime margin, no
 radius override/clipping and final-only checkpoints. Configuration and runtime
 geometry are checked before counting a completed run.
+Dataset, image/mask/depth/box paths and calibration are passed explicitly from
+the prepared descriptor, including a supplied `--data-root`; completed runs
+with another input root or calibration are rejected.
 
 Default training output is `runs/autowork_final_ellipsoid_benchmarks`.
 Use a distinct `--training-root` for each different interval selection; changing
