@@ -18,11 +18,41 @@ D:\CGProjectData\waymo\diagnostics\autowork_generalized_preparation_v1\ego_fixtu
 Preparation and training are deliberately blocked unless the full seven-ego
 comparison passes **both** cached-input and end-to-end verification for the
 current code/recipe. The checker compares all observation arrays exactly,
-checks the v2 preservation decisions, and uses `rtol=1e-6`, `atol=1e-4 m`
+checks the v2 preservation decisions, and uses `rtol=1e-6`, `atol=1e-3 m`
 for fitted centers/radii and `atol=1e-6` for rotations. Preserved arrays require
-exact equality. No automatic tolerance adjustment is implemented.
+exact equality. The 1 mm absolute allowance was explicitly approved by the user
+on 2026-10-13 after isolated historical-source and numerical sensitivity tests.
+It changes acceptance only, not the fitter, recipe or historical geometries.
+No automatic tolerance adjustment is implemented.
 
-The completed numerical replay report is:
+The versioned certificate also requires close combined/data/component objectives
+(`rtol=1e-6`, `atol=1e-6`), matching full-observation counts and validity, and
+close pixel/angle/log-depth distributions. Their absolute allowances are
+`1e-3` pixels, `1e-4` degrees and `1e-4` log-depth units, respectively, with
+`rtol=1e-6`. Full-ray sampling statistics use `rtol=1e-5`, `atol=1e-6`.
+All original safety limits and the 2% full-observation data-loss budget still
+apply; a close geometry with changed losses, visibility or unsafe cameras fails.
+Observation arrays, diagnostic-precision sphere references, mapping metadata and
+preserved geometry keep their exact requirements.
+
+The current approved-policy certificate passed all seven intervals in both
+layers (14/14), and the production `release_gate` accepted its current code,
+recipe, fixture and policy hashes:
+
+```text
+D:\CGProjectData\waymo\diagnostics\autowork_generalized_preparation_release_v4\verification.json
+```
+
+Every observation array, raw-v4 fit, reprojection fit and diagnostic-precision
+sphere/mapping reference matches exactly. The same three geometries are
+preserved exactly; the four others are refined. Maximum final-floor differences
+are 0.489 mm in center and 0.530 mm in radius. Full data-objective differences
+are at most `2.825e-7`, and final combined-objective differences at most
+`1.921e-9`. Existing ego results and geometry files remain unchanged; this
+release does not require retraining them. Missing static inputs remain separate
+blockers, not waived by the numerical release.
+
+The earlier strict-tolerance replay report is retained read-only:
 
 ```text
 D:\CGProjectData\waymo\diagnostics\autowork_generalized_preparation_release_v2\verification.json
@@ -40,8 +70,9 @@ explicitly rather than relying on an unchanged relative density ratio.
 
 Final audit/training-launcher hardening was made after that replay, without
 changing observation building, sphere initialization or numerical fitting.
-The default verification namespace is consequently a fresh
-`autowork_generalized_preparation_release_v3`, which has **not** been certified.
+Its subsequent `autowork_generalized_preparation_release_v3` namespace was
+not certified. The current approved-policy verification namespace is a fresh
+`autowork_generalized_preparation_release_v4`.
 The v2 report and all its artifacts remain unchanged; no metadata is rewritten
 to pretend the latest code was verified by an earlier revision.
 
@@ -54,7 +85,9 @@ Development found that rerunning even the exact historical v1 fitting source
 can differ from its stored W191 0-40 result by fractions of a millimeter. The
 strict gate therefore distinguishes identical observation inputs from numerical
 optimizer replay. The historical results remain valid stored experiments;
-this new preparation release is not silently certified if its refits fail.
+this new preparation release is not silently certified if its approved-policy
+comparisons fail. The full gate still has to pass both layers for all seven
+intervals on current code; an old failed report is never relabeled as a pass.
 
 The diagnostic-only static smoke used W125 124-149, with a maximum camera
 baseline of 0.000355 m. It completed native sphere initialization, observations,
@@ -63,6 +96,15 @@ camera normalized radius was 0.65, conservative clearance was 6 m and data loss
 remained inside the 2% budget. Its files are isolated under
 `D:\CGProjectData\waymo\diagnostics\autowork_static_preparation_smoke_v1`;
 this smoke is not a substitute for the release gate or a training authorization.
+
+After the approved-policy gate passed, the production preparation launcher also
+completed a fresh W125 124-149 smoke under
+`D:\CGProjectData\waymo\diagnostics\autowork_static_preparation_release_v4`.
+It used native initialization and the unchanged recipe, passed safety and the
+2% data-loss budget, and generated no checkpoints or trainings. A training
+dry-run against that preparation validated all stage signatures and planned six
+matched jobs (regular/Visible-UV, three seed-42 repeats) without writing training
+files. See the [approved-policy release report](../reports/generalized_preparation_release_2026-10-13.md).
 
 The pipeline pins the historical legacy-v2 kernel from commit `07cbd74`, with
 source SHA-256 `5228d936fb4ef98fbd235848aa3adaa0db9017529cbfe4102052c2604f6c3603`.
