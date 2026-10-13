@@ -165,7 +165,9 @@ def training_context():
     current = code_snapshot()
     reference = REPO / 'runs/autowork_paper_sphere_baselines_part1of5/manifest.json'
     old = json.loads(reference.read_text())['context']
-    changed = [p for p, h in old['code'].items() if current.get(p) != h]
+    from preparation.compatibility import allowed_preparation_change
+    changed = [p for p, h in old['code'].items() if current.get(p) != h
+               and not allowed_preparation_change(p, h, current.get(p))]
     versions = {k: importlib.metadata.version(k) for k in old['versions']}
     environment = {k: os.environ.get(k) for k in old['environment']}
     if changed or versions != old['versions'] or sys.executable != old['executable'] or environment != old['environment']:

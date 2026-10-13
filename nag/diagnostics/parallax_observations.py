@@ -49,22 +49,32 @@ def check_prepared(pointer, repo):
     return meta
 
 
-def prepare_sequence(args, inv, label):
-    segment,start,stop=SEQUENCES[label]
-    data_dir=args.data_root/f'segment-{segment}'
+def prepare_sequence(args, inv, label, job=None):
+    # The historical three-argument entrypoint remains an ego adapter. The
+    # numerical observation pipeline below is shared, not copied or retuned.
+    segment,start,stop=SEQUENCES[label] if job is None else (job.segment,job.first,job.stop)
+    data_dir=args.data_root/f'segment-{segment}' if job is None else Path(job.data_dir)
+    data_root=args.data_root if job is None else data_dir.parent
+    pose_path=data_dir/'waymo_pose_config_no_distortion.json' if job is None else Path(job.pose_path)
+    raw_pose_path=data_dir/'waymo_pose_config.json' if job is None else Path(job.raw_pose_path)
     cloud_dir=args.cloud_root/f'segment-{segment}'
     run=next(r for r in inv['runs'] if r['sequence']==label)
     size=tuple(run['size'])
-    frames=np.arange(start,stop)
+    frames=np.arange(start,stop) if job is None else np.asarray(job.frames)
     if args.frame_limit:
         frames=frames[np.unique(np.linspace(0,len(frames)-1,min(args.frame_limit,len(frames))).round().astype(int))]
     settings={k:getattr(args,k) for k in ('rays_per_frame','targets_per_frame','frame_limit','visibility_radius',
               'depth_absolute','depth_relative','alignment_p90_limit','seed')}
-    inputs=snapshot(input_files(data_dir,cloud_dir,frames))
+    input_paths=input_files(data_dir,cloud_dir,frames)
+    if job is not None and pose_path != data_dir/'waymo_pose_config_no_distortion.json':
+        input_paths=[p for p in input_paths if p!=data_dir/'waymo_pose_config_no_distortion.json']+[pose_path]
+    inputs=snapshot(input_paths)
     meta={'schema':1,'sequence':label,'settings':settings,'inputs':inputs,'code':code_signature(args.repo),
           'frames':frames.tolist(),'size':size,'camera_policy':inv['camera_policy'],
           'mask_policy':'union of saved NAG mask layers in training-image coordinates; no semantic/static tracking',
-          'scope':'smoke_subset' if len(frames)<stop-start else 'full_interval'}
+          'scope':'smoke_subset' if len(frames)<(stop-start if job is None else len(job.frames)) else 'full_interval'}
+    if job is not None:
+        meta['job']=job.document()
     cache_key=digest(meta)
     out=args.output/label/'observations'/cache_key[:16]
     pointer=args.output/label/'prepared.json'
@@ -79,8 +89,8 @@ def prepare_sequence(args, inv, label):
     from nag_waymo_processing.ellipsoid import EllipsoidJob, load_front_ray_observations
     # Loading frames one at a time preserves the existing per-frame correction
     # convention while bounding memory and avoiding unused frames in smoke mode.
-    camera=json.loads((data_dir/'waymo_pose_config_no_distortion.json').read_text())
-    raw_camera=json.loads((data_dir/'waymo_pose_config.json').read_text())
+    camera=json.loads(pose_path.read_text())
+    raw_camera=json.loads(raw_pose_path.read_text())
     poses=np.asarray(camera['position'])[frames]
     k=intrinsics(camera,size)
     per_frame=[]
@@ -88,8 +98,8 @@ def prepare_sequence(args, inv, label):
     alignment=[]
     rng=np.random.default_rng(args.seed)
     for fi,frame in enumerate(frames):
-        job=EllipsoidJob(f'segment-{segment}',int(frame),int(frame)+1,1,'waymo_pose_config_no_distortion.json',())
-        obs=load_front_ray_observations(job,str(args.cloud_root),str(args.data_root),
+        frame_job=EllipsoidJob(f'segment-{segment}',int(frame),int(frame)+1,1,pose_path.name,())
+        obs=load_front_ray_observations(frame_job,str(args.cloud_root),str(data_root),
                                        correct_pose_mismatches=True,background_only=False)
         points=obs.points
         uv,z=project(points,poses[fi],k)
@@ -114,7 +124,12 @@ def prepare_sequence(args, inv, label):
                        'source_depth_inconsistent':int((in_image&~foreground&~visible).sum()),
                        'eligible_source_points':int(eligible.sum()),'sampled_source_points':len(chosen)})
         if fi in (0,len(frames)//2,len(frames)-1):
-            with Image.open(data_dir/'images_undistorted'/f'{frame:03d}.png') as image:
+            image_path=data_dir/'images_undistorted'/f'{frame:03d}.png'
+            if job is not None:
+                import re
+                image_path=next(p for p in (data_dir/'images_undistorted').iterdir()
+                                if (m:=re.fullmatch(r'(\d+)\.(png|jpg|jpeg)',p.name)) and int(m[1])==int(frame))
+            with Image.open(image_path) as image:
                 image=image.convert('RGB').resize(size)
             arr=np.asarray(image).copy()
             arr[mask]=(arr[mask]*.65+np.array([220,40,180])*.35).astype(np.uint8)
