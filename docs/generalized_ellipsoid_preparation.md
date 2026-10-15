@@ -115,6 +115,58 @@ kernel based on a scene name.
 
 ## Commands
 
+### Optional mask-filter validation fix (15 October 2026)
+
+The common ellipsoid training launcher now validates the loader's effective
+optional mask-filter path. If `mask_indices_filter.json` is absent, NAG saves
+`mask_ids_filter_path: null`; this is valid, not missing required dataset data.
+If the file exists, its exact expected path is still required. Required input
+paths, unexpected filter paths, calibration, geometry and training settings
+retain their strict checks. Do not create a dummy filter file: that would be a
+dataset change rather than a validator correction.
+
+This applies to every scene using `run_final_ellipsoid_benchmarks.sh`, not just
+W141. The plane/sphere final launcher already supports an absent optional
+filter and needs no path-handling change.
+
+The reviewed patch changes validation and signature plumbing only. An explicit
+[SHA-256 ledger](compatibility/optional_mask_validation_v1.json) records the
+before/after hashes of its four Python files. Code signatures use their earlier
+compatibility identities only when **all four current files** match those exact
+reviewed hashes. Unlisted code changes and subsequent edits remain detectable;
+no fitter, model, data, configuration or recipe is exempted. The CLI announces
+the allowance. Raw source hashes remain available with
+`code_signature(validation_compatible=False)` and in the ledger. Existing
+certificates, preparation outputs and training manifests are not rewritten or
+relabeled as newly replayed numerical experiments.
+
+After the fix, rerun the original scene command with the same interval selection
+and output root. A completed first training is validated and skipped, not
+retrained. For example:
+
+```bash
+bash run_final_ellipsoid_benchmarks.sh \
+  --intervals W141_2_53 W141_53_101 W141_102_173 W141_174_197 \
+  --training-root "$PWD/runs/autowork_final_ellipsoid_W141" \
+  --max-hours 7
+```
+
+The invocation budget remains a between-training elapsed-time check, not a
+guaranteed limit on an active training. Prefix the command with `DRY_RUN=1` for
+read-only preparation/provenance validation; a dry run does not itself validate
+or skip completed attempts.
+
+Validation of this patch passed 93 CPU unit/regression tests. Read-only checks
+accepted the existing full 14/14 certificate, W141's completed first training
+and all 19 completed W125 trainings present at the time. The W141 CLI dry run
+validated its 24-job manifest; the real resume loop skipped the completed job
+and stopped at a tiny scheduling budget with all training calls prohibited.
+The final plane/sphere launcher's code/environment preflight also passed.
+No geometry was regenerated, no historical manifest/certificate was rewritten,
+and no NAG training was run to verify this validation-only correction.
+
+### Standard preparation commands
+
 ```bash
 conda activate nag1
 cd /mnt/c/Coding/CGProject/nag1

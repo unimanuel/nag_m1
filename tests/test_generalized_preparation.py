@@ -22,7 +22,8 @@ from preparation.reference import initialize_runner, mapping_from_diagnostic, co
 from preparation.storage import Stage, recipe, write_json, code_signature
 from preparation.verification import (geometry_difference, compare_arrays, compare_mapping,
     release_gate, acceptance_policy, compare_fit_diagnostics)
-from preparation.compatibility import allowed_preparation_change, PATH, OLD, NEW
+from preparation.compatibility import (allowed_preparation_change, PATH, OLD, NEW,
+    VALIDATION_LEDGER, reviewed_validation_snapshot)
 from diagnostics.parallax_observations import targets_for
 import generalized_ellipsoid_preparation as cli
 from preparation import _legacy_floor_kernel as legacy_kernel
@@ -331,6 +332,7 @@ class GeneralizedPreparationTests(unittest.TestCase):
                     cli.training_completed(run,{'data_dir':str(root)})
             c['NAGConfig']['data_path']=str(root)
             for field,suffix in cli.DATA_FIELDS.items():c['NAGConfig'][field]=str(root/suffix)
+            c['NAGConfig']['mask_ids_filter_path']=None
             camera=json.loads((root/'waymo_pose_config_no_distortion.json').read_text())
             c['NAGConfig']['pinhole_camera_config']=copy.deepcopy(camera)
             c['NAGConfig']['pinhole_camera_config']['focal_length']=2.
@@ -344,6 +346,73 @@ class GeneralizedPreparationTests(unittest.TestCase):
         self.assertTrue(allowed_preparation_change(PATH,OLD,NEW))
         self.assertFalse(allowed_preparation_change('nag/model/nag_model.py',OLD,NEW))
         self.assertFalse(allowed_preparation_change(PATH,OLD,'unreviewed'))
+
+    def test_completed_input_paths_accept_absent_optional_filter(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_paths_test_') as d:
+            root=Path(d)
+            c={'data_path':str(root),**{k:str(root/v) for k,v in cli.DATA_FIELDS.items()}}
+            for missing in [None,{'__class__':'Path','value':None}]:
+                c['mask_ids_filter_path']=missing
+                cli.validate_completed_input_paths(c,{'data_dir':str(root)})
+
+    def test_completed_input_paths_require_existing_filter_and_correct_path(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_paths_test_') as d:
+            root=Path(d);mask=root/'mask_indices_filter.json';mask.write_text('[3]')
+            c={'data_path':{'__class__':'Path','value':str(root)},
+               **{k:{'__class__':'Path','value':str(root/v)} for k,v in cli.DATA_FIELDS.items()}}
+            cli.validate_completed_input_paths(c,{'data_dir':str(root)})
+            for wrong in [None,str(root/'another_filter.json')]:
+                c['mask_ids_filter_path']=wrong
+                with self.assertRaisesRegex(ValueError,'mask_ids_filter_path'):
+                    cli.validate_completed_input_paths(c,{'data_dir':str(root)})
+
+    def test_completed_input_paths_do_not_accept_arbitrary_absent_filter_paths(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_paths_test_') as d:
+            root=Path(d)
+            c={'data_path':str(root),**{k:str(root/v) for k,v in cli.DATA_FIELDS.items()}}
+            for wrong in [str(root/'mask_indices_filter.json'),str(root/'another_filter.json')]:
+                c['mask_ids_filter_path']=wrong
+                with self.assertRaisesRegex(ValueError,'mask_ids_filter_path'):
+                    cli.validate_completed_input_paths(c,{'data_dir':str(root)})
+
+    def test_completed_input_paths_keep_required_paths_strict(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_paths_test_') as d:
+            root=Path(d)
+            original={'data_path':str(root),**{k:str(root/v) for k,v in cli.DATA_FIELDS.items()}}
+            original['mask_ids_filter_path']=None
+            for field in ['data_path']+[k for k in cli.DATA_FIELDS if k!='mask_ids_filter_path']:
+                for wrong in [None,str(root/'wrong')]:
+                    c=copy.deepcopy(original);c[field]=wrong
+                    with self.subTest(field=field,wrong=wrong),self.assertRaises(ValueError):
+                        cli.validate_completed_input_paths(c,{'data_dir':str(root)})
+
+    def test_validation_patch_hash_aliases_are_exact_and_do_not_cover_training(self):
+        ledger=json.loads(VALIDATION_LEDGER.read_text())
+        raw=code_signature(validation_compatible=False)
+        compatible=reviewed_validation_snapshot(raw)
+        for path,entry in ledger['files'].items():
+            self.assertEqual(raw[path],entry['after'])
+            self.assertEqual(compatible[path],entry['before'])
+        changed=copy.deepcopy(raw)
+        changed['nag/model/nag_functional_model.py']='unreviewed-training-change'
+        self.assertEqual(reviewed_validation_snapshot(changed)['nag/model/nag_functional_model.py'],
+                         'unreviewed-training-change')
+        path=next(iter(ledger['files']))
+        changed=copy.deepcopy(raw);changed[path]='unreviewed-validator-change'
+        self.assertEqual(reviewed_validation_snapshot(changed)[path],'unreviewed-validator-change')
+        with patch('preparation.jobs.sha',return_value='unreviewed-source-change'):
+            self.assertEqual(reviewed_validation_snapshot(raw),raw)
+
+    def test_validation_patch_keeps_existing_stage_signature_without_rewriting_it(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_stage_test_') as d:
+            root=Path(d);sig={'code':code_signature(),'frames':[0,1]}
+            stage=Stage(root,'example',sig);out=stage.attempt()
+            result=out/'result.json';result.write_text('{}');stage.complete(result,out)
+            before=stage.manifest.read_bytes()
+            self.assertEqual(Stage(root,'example',sig).result,result)
+            self.assertEqual(stage.manifest.read_bytes(),before)
+            changed=copy.deepcopy(sig);changed['code']['nag/model/nag_functional_model.py']='changed'
+            with self.assertRaises(ValueError):Stage(root,'example',changed)
 
     def test_cloud_lookup_uses_full_segment_and_training_list_index(self):
         jobs=discover(config_paths=[REPO/'config/waymo/autowork_paper-final/segment-12511696717465549299_0_40_large-undistorted.yaml'])

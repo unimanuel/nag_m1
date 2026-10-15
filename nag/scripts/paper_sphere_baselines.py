@@ -95,7 +95,8 @@ def code_snapshot():
     paths = [p for base in [REPO / 'nag', REPO / 'tools/tools'] for p in base.rglob('*.py')]
     paths += [REPO / 'run_paper_sphere_baselines.sh']
     paths += [REPO / f'run_paper_sphere_baselines_part{i}.sh' for i in range(1, 6)]
-    return {str(p.relative_to(REPO)): sha(p) for p in sorted(paths)}
+    from preparation.compatibility import reviewed_validation_snapshot
+    return reviewed_validation_snapshot({str(p.relative_to(REPO)): sha(p) for p in sorted(paths)})
 
 
 def check_training_compatibility(old, current):

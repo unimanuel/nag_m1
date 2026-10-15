@@ -14,7 +14,7 @@ def write_json(path, value):
     tmp.replace(path)
 
 
-def code_signature():
+def code_signature(*, validation_compatible=True):
     paths = list((REPO / 'nag/preparation').glob('*.py'))
     paths += list((REPO / 'nag/diagnostics').glob('*.py'))
     paths += [REPO / p for p in ['nag/reprojection_ellipsoid.py', 'nag/sampling_floor_ellipsoid.py',
@@ -25,7 +25,11 @@ def code_signature():
         'libs/nag-waymo-processing/nag_waymo_processing/point_cloud.py']]
     for folder in ['nag','tools/tools']:
         paths += list((REPO/folder).rglob('*.py'))
-    return {str(p.relative_to(REPO)): sha(p) for p in sorted(set(paths)) if p.exists()}
+    snapshot = {str(p.relative_to(REPO)): sha(p) for p in sorted(set(paths)) if p.exists()}
+    if validation_compatible:
+        from .compatibility import reviewed_validation_snapshot
+        return reviewed_validation_snapshot(snapshot)
+    return snapshot
 
 
 class Stage:

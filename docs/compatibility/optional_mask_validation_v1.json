@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "reason": "Reviewed optional-mask completed-run validator fix and exact compatibility plumbing; no observation, initialization, fitter, model, training, configuration or geometry changes.",
+  "files": {
+    "nag/scripts/generalized_ellipsoid_preparation.py": {
+      "before": "6bae22c8cc875256fa6313e58ebc1219c3a9a9033d9385ed5636e2e8c985b93a",
+      "after": "3a578ce41ca72b537b1759b08998402177aebca52ac43816c5651db2bec2b7a5"
+    },
+    "nag/preparation/compatibility.py": {
+      "before": "85597e5b97d5f3151bb9cb103fe29bafc8fb8d839a46b9265a779ac96a934616",
+      "after": "fee4771fca236e7de03cdfd7b1bb5fab9987528d664c6c9bc6f3ae2cb3a27578"
+    },
+    "nag/preparation/storage.py": {
+      "before": "43ee01bde1aba0538a7dbdd38dc05e2e9bc6737de877b7e97a492520b87e4988",
+      "after": "542ebc57822049b98ebdc5a405a12dca9d3bf4b1d72d723811c9806fc3bf2775"
+    },
+    "nag/scripts/paper_sphere_baselines.py": {
+      "before": "166143400235d205d8ffe66f72c6a9740896d567f90e21fb80a24b2059543658",
+      "after": "b7199e49172400daa1635fab2e81bbe03522038a14f228907f3516a2231cbb90"
+    }
+  }
+}

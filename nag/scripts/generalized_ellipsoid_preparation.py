@@ -106,19 +106,27 @@ def training_command(job, out):
     return command
 
 
+def validate_completed_input_paths(c, job):
+    """Match NAG's effective paths, including its absent optional filter."""
+    def resolved(v):
+        while isinstance(v,dict):v=v['value']
+        return None if v is None else (REPO/v).resolve()
+    if resolved(c.get('data_path'))!=Path(job['data_dir']).resolve():
+        raise ValueError('Completed training used a different prepared dataset root')
+    for field,suffix in DATA_FIELDS.items():
+        expected=(Path(job['data_dir'])/suffix).resolve()
+        if field=='mask_ids_filter_path' and not expected.exists():
+            expected=None  # NAGConfig clears this optional path when absent.
+        if resolved(c.get(field))!=expected:
+            raise ValueError(f'Completed training input path mismatch: {field}')
+
+
 def training_completed(path, job):
     from paper_plane_baselines import basic_completed
     result=basic_completed(path,job)
     if result is None:return None
     c=settings(path/'training_config.yaml')
-    def resolved(v):
-        while isinstance(v,dict):v=v['value']
-        return (REPO/v).resolve()
-    if resolved(c['data_path'])!=Path(job['data_dir']).resolve():
-        raise ValueError('Completed training used a different prepared dataset root')
-    for field,suffix in DATA_FIELDS.items():
-        if resolved(c[field])!=(Path(job['data_dir'])/suffix).resolve():
-            raise ValueError(f'Completed training input path mismatch: {field}')
+    validate_completed_input_paths(c,job)
     import numpy as np
     from diagnostics.parallax_io import intrinsics
     calibration=json.loads(Path(job['pose_path']).read_text())
@@ -224,6 +232,12 @@ def main():
     p.add_argument('--max-hours',type=float,default=9.)
     p.add_argument('--dry-run',action='store_true')
     args=p.parse_args()
+    from preparation.compatibility import reviewed_validation_snapshot
+    raw_code=code_signature(validation_compatible=False)
+    if reviewed_validation_snapshot(raw_code)!=raw_code:
+        print('Compatibility: reviewed optional-mask validation fix; exact hash-backed '
+              'aliases preserve existing preparation certificates and run manifests. '
+              'No fitting or training settings are changed.',flush=True)
     for folder in [args.output_root,args.verification_root,args.training_root]:
         if not folder.name.startswith('autowork_'):p.error('New output namespaces must begin with autowork_')
     if args.max_hours<=0:p.error('max-hours must be positive')
