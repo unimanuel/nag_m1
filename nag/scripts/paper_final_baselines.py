@@ -28,6 +28,7 @@ from paper_plane_baselines import (PLANE_TYPE, SPHERE_TYPE, audit_yaml_family,
                                    config_differences, config, basic_completed)
 from paper_sphere_baselines import sha, duration_seconds, code_snapshot
 from diagnostics.parallax_io import diagnostic
+from preparation.jobs import training_worker_override, assert_training_worker_policy
 
 TEMPLATE = REPO / 'config/waymo/large-ego/segment-2547899409721197155_0_37_large-undistorted.yaml'
 CONFIG_ROOT = REPO / 'config/waymo/autowork_paper-final'
@@ -194,6 +195,7 @@ def assert_context(context):
 
 def make_jobs(items, history):
     jobs = []
+    configured_workers = config(TEMPLATE)['num_workers']
     for repeat in range(1, 4):
         for label, item in items.items():
             # Older sampler timing is only an estimate. Never promise a job cap.
@@ -202,12 +204,28 @@ def make_jobs(items, history):
                        and r['class'] in (SPHERE_TYPE, PLANE_TYPE)]
             seconds = max(timings or [max(1200, (item['stop'] - item['first']) * 60)])
             for treatment in (TREATMENTS if repeat % 2 else TREATMENTS[::-1]):
-                jobs.append({'id': f'autowork_{label}_{treatment}_same_seed_seed42_repeat{repeat:02d}',
+                cfg = str(CONFIG_ROOT / (item['stem'] + SUFFIX[treatment] + '.yaml'))
+                override = training_worker_override(cfg, item['segment'], configured_workers)
+                worker_tag = f'_workers{override["num_workers"]}' if override else ''
+                jobs.append({'id': f'autowork_{label}_{treatment}_same_seed_seed42_repeat{repeat:02d}{worker_tag}',
                     'label': label, 'treatment': treatment, 'repeat': repeat, 'seed': 42,
                     'frame_count': item['stop'] - item['first'], 'first': item['first'], 'stop': item['stop'],
-                    'segment': item['segment'], 'config': str(CONFIG_ROOT / (item['stem'] + SUFFIX[treatment] + '.yaml')),
-                    'historical_seconds': seconds, 'buffered_seconds': seconds * 1.35})
+                    'segment': item['segment'], 'config': cfg,
+                    'historical_seconds': seconds, 'buffered_seconds': seconds * 1.35, **override})
     return jobs
+
+
+def worker_output_suffix(items):
+    configured = config(TEMPLATE)['num_workers']
+    counts = {training_worker_override(CONFIG_ROOT / (item['stem'] + '.yaml'),
+              item['segment'], configured).get('num_workers', configured) for item in items.values()}
+    if counts == {configured}:
+        return ''
+    return f'_{next(iter(counts))}workers' if len(counts) == 1 else '_mixedworkers'
+
+
+def assert_job_worker_policy(job):
+    assert_training_worker_policy(job, job['segment'], config(job['config'])['num_workers'])
 
 
 def command(job, output):
@@ -216,6 +234,8 @@ def command(job, output):
            '--seed', '42', '--name', job['id'], '--output-path', str(output)]
     if job['treatment'] != 'plane':
         cmd.append('--background-sphere-radius-from-visible-plane-centers')
+    if 'num_workers' in job:
+        cmd.extend(['--num-workers', str(job['num_workers'])])
     return cmd
 
 
@@ -224,6 +244,8 @@ def completed_job(path, job):
     if metrics is None:
         return None
     c, reference = config(path / 'training_config.yaml'), config(job['config'])
+    if 'num_workers' in job:
+        reference['num_workers'] = job['num_workers']
     reference['name'] = job['id']
     reference['used_runner_type'] = 'nag.run.nag_runner.NAGRunner'
     reference['object_rigid_control_points'] = job['frame_count']
@@ -340,7 +362,8 @@ def main():
     items = {k: v for k, v in all_items.items() if (not args.segment or k.split('_')[0] == args.segment)
              and (not args.intervals or k in args.intervals)}
     selection = args.segment or '__'.join(items)
-    root = (args.output_root or REPO / ('runs/autowork_paper_final_baselines_' + selection)).resolve()
+    suffix = worker_output_suffix(items) if args.output_root is None else ''
+    root = (args.output_root or REPO / ('runs/autowork_paper_final_baselines_' + selection + suffix)).resolve()
     manifest_path = root / 'manifest.json'
     if args.summary:
         summarize(root, json.loads(manifest_path.read_text())['jobs'])
@@ -350,7 +373,10 @@ def main():
     for label, item in items.items():
         audit = audits[label] = data_audit(item, args.data_root)
         movement = audit['camera_path_length_m']
-        print(f'{label}: {"READY" if audit["ready"] else "BLOCKED"}; camera path {movement} m; '
+        configured = config(TEMPLATE)['num_workers']
+        workers = training_worker_override(CONFIG_ROOT / (item['stem'] + '.yaml'),
+                                           item['segment'], configured).get('num_workers', configured)
+        print(f'{label}: {"READY" if audit["ready"] else "BLOCKED"}; workers={workers}; camera path {movement} m; '
               f'missing={audit["missing"]}', flush=True)
     history = historical_runs(items) if args.historical or not manifest_path.exists() else None
     if args.historical:
@@ -382,6 +408,12 @@ def main():
         manifest = {'schema': 1, 'labels': list(items), 'jobs': jobs, 'context': context,
                     'data': audits, 'data_root': str(args.data_root.resolve()),
                     'historical_inventory': history, 'purpose': 'fresh three seed-42 repeats; no archival metric reuse'}
+    for job in jobs:
+        assert_job_worker_policy(job)
+    effective = {label: training_worker_override(CONFIG_ROOT / (item['stem'] + '.yaml'),
+                 item['segment'], config(TEMPLATE)['num_workers']).get('num_workers', config(TEMPLATE)['num_workers'])
+                 for label, item in items.items()}
+    print('Effective training workers: ' + json.dumps(effective, sort_keys=True), flush=True)
     estimate = sum(j['buffered_seconds'] for j in jobs) / 3600
     print(f'{len(jobs)} jobs, full selection buffered historical estimate {estimate:.2f} h. '
           f'Invocation scheduling budget {args.max_hours} h; active jobs are never killed.', flush=True)
@@ -425,6 +457,7 @@ def main():
                     break
                 print('WARNING: explicitly starting one estimated-over-budget job.', flush=True)
             assert_context(context)
+            assert_job_worker_policy(job)
             if data_audit(items[job['label']], args.data_root) != audits[job['label']]:
                 raise ValueError('Training inputs changed during the batch')
             number = max([int(q.name.split('_')[-1]) for q in attempts] or [0]) + 1

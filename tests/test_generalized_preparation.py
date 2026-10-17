@@ -17,13 +17,14 @@ import yaml
 REPO=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(REPO/'nag'))
 sys.path.insert(1,str(REPO/'nag/scripts'))
-from preparation.jobs import PreparationJob, discover, audit, select, SPHERE
+from preparation.jobs import (PreparationJob, discover, audit, select, SPHERE,
+    training_worker_override, assert_training_worker_policy, FINAL_WORKER_POLICY)
 from preparation.reference import initialize_runner, mapping_from_diagnostic, completed_reference
 from preparation.storage import Stage, recipe, write_json, code_signature
 from preparation.verification import (geometry_difference, compare_arrays, compare_mapping,
     release_gate, acceptance_policy, compare_fit_diagnostics)
 from preparation.compatibility import (allowed_preparation_change, PATH, OLD, NEW,
-    VALIDATION_LEDGER, reviewed_validation_snapshot)
+    VALIDATION_LEDGER, WORKER_LEDGER, reviewed_validation_snapshot)
 from diagnostics.parallax_observations import targets_for
 import generalized_ellipsoid_preparation as cli
 from preparation import _legacy_floor_kernel as legacy_kernel
@@ -387,7 +388,7 @@ class GeneralizedPreparationTests(unittest.TestCase):
                         cli.validate_completed_input_paths(c,{'data_dir':str(root)})
 
     def test_validation_patch_hash_aliases_are_exact_and_do_not_cover_training(self):
-        ledger=json.loads(VALIDATION_LEDGER.read_text())
+        ledger=json.loads(WORKER_LEDGER.read_text())
         raw=code_signature(validation_compatible=False)
         compatible=reviewed_validation_snapshot(raw)
         for path,entry in ledger['files'].items():
@@ -413,6 +414,76 @@ class GeneralizedPreparationTests(unittest.TestCase):
             self.assertEqual(stage.manifest.read_bytes(),before)
             changed=copy.deepcopy(sig);changed['code']['nag/model/nag_functional_model.py']='changed'
             with self.assertRaises(ValueError):Stage(root,'example',changed)
+
+    def test_worker_policy_is_scoped_to_full_segments_and_paper_configs(self):
+        cfg=REPO/'config/waymo/autowork_paper-final/anything.yaml'
+        for segment,workers in json.loads(FINAL_WORKER_POLICY.read_text())['segments'].items():
+            override=training_worker_override(cfg,segment,10)
+            if workers==10:
+                self.assertEqual(override,{})
+            else:
+                self.assertEqual(override['num_workers'],4)
+                self.assertEqual(override['source_num_workers'],10)
+                self.assertEqual(override['worker_policy_sha256'],hashlib.sha256(FINAL_WORKER_POLICY.read_bytes()).hexdigest())
+        self.assertEqual(training_worker_override(cfg,'3249999999999999999',10),{})
+        self.assertEqual(training_worker_override(REPO/'config/waymo/large-ego/anything.yaml',
+                                                 '3247914894323111613',10),{})
+
+    def test_worker_policy_rejects_unrecorded_or_changed_override(self):
+        cfg=REPO/'config/waymo/autowork_paper-final/anything.yaml'
+        segment='3247914894323111613'
+        job={'config':str(cfg),**training_worker_override(cfg,segment,10)}
+        assert_training_worker_policy(job,segment,10)
+        for key,value in [('num_workers',10),('worker_policy_sha256','changed')]:
+            wrong=copy.deepcopy(job);wrong[key]=value
+            with self.assertRaisesRegex(ValueError,'worker policy changed'):
+                assert_training_worker_policy(wrong,segment,10)
+        with self.assertRaises(ValueError):
+            assert_training_worker_policy({'config':str(cfg)},segment,10)
+
+    def test_worker_policy_edit_invalidates_four_worker_jobs_without_changing_source_yamls(self):
+        cfg=REPO/'config/waymo/autowork_paper-final/anything.yaml'
+        segment='3247914894323111613'
+        with tempfile.TemporaryDirectory(prefix='autowork_worker_test_') as d:
+            path=Path(d)/'policy.json';doc=json.loads(FINAL_WORKER_POLICY.read_text())
+            path.write_text(json.dumps(doc))
+            with patch('preparation.jobs.FINAL_WORKER_POLICY',path):
+                job={'config':str(cfg),**training_worker_override(cfg,segment,10)}
+                assert_training_worker_policy(job,segment,10)
+                doc['purpose']='changed provenance';path.write_text(json.dumps(doc))
+                with self.assertRaisesRegex(ValueError,'worker policy changed'):
+                    assert_training_worker_policy(job,segment,10)
+
+    def test_worker_policy_does_not_change_generic_discovery_or_read_missing_policy(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_job_test_') as d:
+            base=Path(d);root=dataset(base);paths=configs(base,root)
+            with patch('preparation.jobs.FINAL_WORKER_POLICY',base/'absent.json'):
+                self.assertEqual(len(discover(config_paths=paths)),1)
+                self.assertEqual(training_worker_override(paths[0],'3247914894323111613',10),{})
+
+    def test_worker_override_changes_only_command_worker_flag(self):
+        base={'id':'example','config':'regular.yaml','geometry':'ellipsoid.json',
+              'data_dir':'/data','pose_path':'/pose.json'}
+        original=cli.training_command(base,Path('out'))
+        changed=cli.training_command({**base,'num_workers':4},Path('out'))
+        self.assertEqual(changed,original+['--num-workers','4'])
+        self.assertNotIn('--num-workers',original)
+
+    def test_ellipsoid_four_worker_validation_cannot_reuse_archived_ten_worker_run(self):
+        root=REPO/'runs/autowork_final_ellipsoid_W324_10workers'
+        if not(root/'manifest.json').is_file():self.skipTest('Archived W324 cohort not available')
+        old=json.loads((root/'manifest.json').read_text())['jobs'][0]
+        source=root/old['id']/'attempt_001'
+        four={**old,'id':old['id']+'_workers4','num_workers':4}
+        with self.assertRaises(ValueError):cli.training_completed(source,four)
+        original=cli.settings
+        def effective(path):
+            c=original(path)
+            if Path(path)==source/'training_config.yaml':
+                c['name']=four['id'];c['num_workers']=4
+            return c
+        with patch.object(cli,'settings',side_effect=effective):
+            self.assertIsNotNone(cli.training_completed(source,four))
 
     def test_cloud_lookup_uses_full_segment_and_training_list_index(self):
         jobs=discover(config_paths=[REPO/'config/waymo/autowork_paper-final/segment-12511696717465549299_0_40_large-undistorted.yaml'])

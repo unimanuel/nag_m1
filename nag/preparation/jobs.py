@@ -15,6 +15,8 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 SPHERE = 'nag.model.view_dependent_background_image_sphere_scene_node_3d.ViewDependentBackgroundImageSphereSceneNode3D'
 PLANE = 'nag.model.view_dependent_background_image_plane_scene_node_3d.ViewDependentBackgroundImagePlaneSceneNode3D'
+FINAL_WORKER_POLICY = REPO / 'config/waymo/autowork_paper-final_worker_policy.json'
+WORKER_OVERRIDE_FIELDS = ('num_workers', 'source_num_workers', 'worker_policy_path', 'worker_policy_sha256')
 
 
 def sha(path):
@@ -23,6 +25,35 @@ def sha(path):
 
 def settings(path):
     return yaml.safe_load(Path(path).read_text())['NAGConfig']
+
+
+def training_worker_override(config_path, segment, configured_workers):
+    """Apply the paper-only training policy without changing preparation inputs.
+
+    Unchanged ten-worker jobs retain their historical manifest representation.
+    Other YAML directories and unlisted segments keep their own worker setting.
+    """
+    if Path(config_path).resolve().parent != (REPO / 'config/waymo/autowork_paper-final').resolve():
+        return {}
+    policy = json.loads(FINAL_WORKER_POLICY.read_text())
+    segments = policy.get('segments', {})
+    if (policy.get('schema') != 1 or not isinstance(segments, dict) or
+            any(not re.fullmatch(r'\d{10,}', s) or type(n) is not int or n < 0
+                for s, n in segments.items())):
+        raise ValueError('Invalid final-scene worker policy')
+    workers = segments.get(str(segment), configured_workers)
+    if workers == configured_workers:
+        return {}
+    return {'num_workers': workers, 'source_num_workers': configured_workers,
+            'worker_policy_path': str(FINAL_WORKER_POLICY.resolve()),
+            'worker_policy_sha256': sha(FINAL_WORKER_POLICY)}
+
+
+def assert_training_worker_policy(job, segment, configured_workers):
+    expected = training_worker_override(job['config'], segment, configured_workers)
+    recorded = {key: job[key] for key in WORKER_OVERRIDE_FIELDS if key in job}
+    if recorded != expected:
+        raise ValueError('Final-scene worker policy changed; preserve this cohort and use a new output root')
 
 
 def path_value(value, values, environment, base):

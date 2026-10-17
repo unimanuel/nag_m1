@@ -14,7 +14,8 @@ import time
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO/'nag'))
 sys.path.insert(1, str(REPO/'nag/scripts'))
-from preparation.jobs import audit, discover, select, sha, settings
+from preparation.jobs import (audit, discover, select, sha, settings,
+                              training_worker_override, assert_training_worker_policy)
 from preparation.storage import code_signature, recipe, write_json, Stage
 from preparation.pipeline import prepare, reference_stage, signature, RAW_PYTHON
 from preparation.verification import verify, release_gate
@@ -87,11 +88,13 @@ def training_jobs(jobs, preparation_root, cloud_root=CLOUD_ROOT):
                 if (c.get('seed')!=42 or c.get('max_epochs')!=80 or c.get('deterministic',False)
                         or c.get('checkpoint_path') or c.get('save_intermediate_checkpoints',False)):
                     raise ValueError('Requires matched fresh epoch-80 seed-42 final-only training')
-                result.append({'id': f'autowork_{job.uid}_ellipsoid_{mode}_seed42_repeat{repeat:02d}',
+                override=training_worker_override(cfg,job.segment,c.get('num_workers'))
+                worker_tag=f'_workers{override["num_workers"]}' if override else ''
+                result.append({'id': f'autowork_{job.uid}_ellipsoid_{mode}_seed42_repeat{repeat:02d}{worker_tag}',
                     'label':job.label, 'uid':job.uid, 'mode':mode, 'repeat':repeat, 'seed':42,
                     'frame_count':len(job.frames), 'config':cfg, 'config_sha256':sha(cfg),
                     'data_dir':job.data_dir,'pose_path':job.pose_path,'size':list(job.size),
-                    'geometry':record['floor'], 'geometry_sha256':sha(record['floor'])})
+                    'geometry':record['floor'], 'geometry_sha256':sha(record['floor']), **override})
     return result
 
 
@@ -103,6 +106,8 @@ def training_command(job, out):
         '--data-path',job['data_dir'],'--pinhole-camera-config',job['pose_path']]
     for field,suffix in DATA_FIELDS.items():
         command.extend(['--'+field.replace('_','-'),str(Path(job['data_dir'])/suffix)])
+    if 'num_workers' in job:
+        command.extend(['--num-workers',str(job['num_workers'])])
     return command
 
 
@@ -134,6 +139,7 @@ def training_completed(path, job):
             not np.array_equal(intrinsics(c['pinhole_camera_config'],job['size']),intrinsics(calibration,job['size']))):
         raise ValueError('Completed training calibration mismatch')
     ref=copy.deepcopy(settings(job['config']))
+    if 'num_workers' in job:ref['num_workers']=job['num_workers']
     ref.update(name=job['id'],background_plane_type=ELLIPSOID_TYPE,
                background_ellipsoid_scale_margin=0.,background_ellipsoid_texture_orientation='legacy',
                object_rigid_control_points=job['frame_count'],used_runner_type='nag.run.nag_runner.NAGRunner')
@@ -181,6 +187,8 @@ def train(jobs, args):
     if root.exists() and any(root.iterdir()) and (not (root/'manifest.json').exists() or json.loads((root/'manifest.json').read_text())!=manifest):
         raise ValueError('Unowned/conflicting training output; use another autowork root')
     for job in planned:
+        workers=job.get('num_workers',settings(job['config']).get('num_workers'))
+        print(f'{job["label"]}: effective training workers={workers}',flush=True)
         print(shlex.join(training_command(job,root/job['id']/'attempt_001')),flush=True)
     if args.dry_run:
         print(f'{len(planned)} planned trainings; no files or training created.')
@@ -207,6 +215,8 @@ def train(jobs, args):
                 raise ValueError('Code changed during training batch')
             if sha(job['config'])!=job['config_sha256'] or sha(job['geometry'])!=job['geometry_sha256']:
                 raise ValueError('Frozen training inputs changed')
+            segment=job['uid'].split('_frames_',1)[0].removeprefix('segment-')
+            assert_training_worker_policy(job,segment,settings(job['config']).get('num_workers'))
             n=max([int(p.name.split('_')[-1]) for p in attempts]or[0])+1
             out=root/job['id']/f'attempt_{n:03d}'
             subprocess.run(training_command(job,out),cwd=REPO,check=True)
@@ -235,9 +245,9 @@ def main():
     from preparation.compatibility import reviewed_validation_snapshot
     raw_code=code_signature(validation_compatible=False)
     if reviewed_validation_snapshot(raw_code)!=raw_code:
-        print('Compatibility: reviewed optional-mask validation fix; exact hash-backed '
+        print('Compatibility: reviewed launcher-only changes; exact hash-backed '
               'aliases preserve existing preparation certificates and run manifests. '
-              'No fitting or training settings are changed.',flush=True)
+              'No fitting changes; training worker overrides are explicit in job manifests.',flush=True)
     for folder in [args.output_root,args.verification_root,args.training_root]:
         if not folder.name.startswith('autowork_'):p.error('New output namespaces must begin with autowork_')
     if args.max_hours<=0:p.error('max-hours must be positive')

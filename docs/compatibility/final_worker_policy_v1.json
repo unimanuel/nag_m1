@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "reason": "Launcher-only worker-policy changes preserve preparation and existing ten-worker metadata. Four-worker training is explicitly different: job IDs, command overrides, policy hashes and saved configurations separate it from ten-worker results. No fitting, model, loss, sampling-budget or historical artifact changes.",
+  "files": {
+    "nag/preparation/jobs.py": {
+      "before": "187c5b9c60efd81042846268f530ba925e8c98037729a9ab69fe258c79434e33",
+      "previous": "187c5b9c60efd81042846268f530ba925e8c98037729a9ab69fe258c79434e33",
+      "after": "605a5eb19d9a6fa20fed7cf58a98e9fdcbfca96205efc5ad66a5947304916cf4"
+    },
+    "nag/preparation/compatibility.py": {
+      "before": "85597e5b97d5f3151bb9cb103fe29bafc8fb8d839a46b9265a779ac96a934616",
+      "previous": "fee4771fca236e7de03cdfd7b1bb5fab9987528d664c6c9bc6f3ae2cb3a27578",
+      "after": "d7dbea8b11b9b3fa87f119664d7e89498866ad8fb69816273277c6cba7f9b8fc"
+    },
+    "nag/preparation/storage.py": {
+      "before": "43ee01bde1aba0538a7dbdd38dc05e2e9bc6737de877b7e97a492520b87e4988",
+      "previous": "542ebc57822049b98ebdc5a405a12dca9d3bf4b1d72d723811c9806fc3bf2775",
+      "after": "542ebc57822049b98ebdc5a405a12dca9d3bf4b1d72d723811c9806fc3bf2775"
+    },
+    "nag/scripts/generalized_ellipsoid_preparation.py": {
+      "before": "6bae22c8cc875256fa6313e58ebc1219c3a9a9033d9385ed5636e2e8c985b93a",
+      "previous": "3a578ce41ca72b537b1759b08998402177aebca52ac43816c5651db2bec2b7a5",
+      "after": "7735a4993d6e57ec5873fa789e187413bfa5d786a351a66ecc4fee3f6d118c80"
+    },
+    "nag/scripts/paper_sphere_baselines.py": {
+      "before": "166143400235d205d8ffe66f72c6a9740896d567f90e21fb80a24b2059543658",
+      "previous": "b7199e49172400daa1635fab2e81bbe03522038a14f228907f3516a2231cbb90",
+      "after": "b7199e49172400daa1635fab2e81bbe03522038a14f228907f3516a2231cbb90"
+    },
+    "nag/scripts/paper_final_baselines.py": {
+      "before": "b7dac646b68718533e7118721174efd07ff1a90c6f9c8da581a1b283e7e0827b",
+      "previous": "b7dac646b68718533e7118721174efd07ff1a90c6f9c8da581a1b283e7e0827b",
+      "after": "28e60edb7fc2caefc29444d7bed6f3b0e28d1f420f82992f9034e2ae209c57c2"
+    }
+  }
+}

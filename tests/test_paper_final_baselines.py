@@ -87,7 +87,8 @@ class FinalBaselineTests(unittest.TestCase):
             self.assertEqual(result['missing'], {'depth': [1]})
 
     def test_missing_depth_blocks_training_instead_of_changing_frame_selection(self):
-        with patch.object(driver, 'intervals', return_value={'W125_0_1': {}}), \
+        with patch.object(driver, 'intervals', return_value={'W125_0_1': {
+                    'segment':'123','stem':'example','first':0,'stop':2}}), \
                 patch.object(driver, 'yaml_audit'), \
                 patch.object(driver, 'data_audit', return_value={'ready': False, 'missing': {'depth': [1]},
                                                               'camera_path_length_m': 0}), \
@@ -116,6 +117,7 @@ class FinalBaselineTests(unittest.TestCase):
                         patch.object(driver, 'data_audit', return_value=ready), \
                         patch.object(driver, 'historical_runs', return_value={'W125_0_1': []}), \
                         patch.object(driver, 'training_context', return_value={}), \
+                        patch.object(driver, 'assert_job_worker_policy'), \
                         patch.object(driver.subprocess, 'run') as run, \
                         patch.object(sys, 'argv', ['driver', '--segment', 'W125', '--output-root', str(output), flag]), \
                         contextlib.redirect_stdout(io.StringIO()):
@@ -128,7 +130,8 @@ class FinalBaselineTests(unittest.TestCase):
             output = Path(directory) / 'autowork_output'
             output.mkdir()
             (output / 'user.txt').write_text('preserve')
-            with patch.object(driver, 'intervals', return_value={'W125_0_1': {}}), \
+            with patch.object(driver, 'intervals', return_value={'W125_0_1': {
+                        'segment':'123','stem':'example','first':0,'stop':2}}), \
                     patch.object(driver, 'yaml_audit'), \
                     patch.object(driver, 'data_audit', return_value={'ready': True, 'missing': {}, 'camera_path_length_m': 0}), \
                     patch.object(driver, 'historical_runs', return_value={}), \
@@ -179,6 +182,7 @@ class FinalBaselineTests(unittest.TestCase):
                 patch.object(driver, 'historical_runs', return_value={'W125_0_1': []}), \
                 patch.object(driver, 'training_context', return_value={}), \
                 patch.object(driver, 'assert_context'), patch.object(driver, 'make_jobs', return_value=jobs), \
+                patch.object(driver, 'assert_job_worker_policy'), \
                 patch.object(driver, 'completed_job', side_effect=successful), \
                 patch.object(driver.subprocess, 'run', side_effect=training) as run, \
                 patch.object(sys, 'argv', ['driver', '--segment', 'W125', '--output-root', str(root), *flags]), \
@@ -228,6 +232,46 @@ class FinalBaselineTests(unittest.TestCase):
                 self.assertEqual(driver.scheduling_seconds(root, wrong, [job]), 9999)
             with patch.object(driver, 'completed_job', return_value=None):
                 self.assertEqual(driver.scheduling_seconds(root, job, [job]), 9999)
+
+    def test_worker_policy_is_matched_across_all_final_treatments(self):
+        items=driver.intervals()
+        jobs=driver.make_jobs(items,{label:[]for label in items})
+        for label,item in items.items():
+            group=[j for j in jobs if j['label']==label]
+            four=label.startswith(('W324_','W344_','W952_','W975_'))
+            self.assertEqual({j.get('num_workers',10)for j in group},{4 if four else 10})
+            self.assertEqual(driver.worker_output_suffix({label:item}),'_4workers'if four else'')
+            for job in group:
+                driver.assert_job_worker_policy(job)
+                cmd=driver.command(job,Path('out'))
+                if four:
+                    self.assertEqual(cmd[-2:],['--num-workers','4'])
+                    self.assertTrue(job['id'].endswith('_workers4'))
+                    self.assertIn('worker_policy_sha256',job)
+                else:
+                    self.assertNotIn('--num-workers',cmd)
+                    self.assertNotIn('num_workers',job)
+
+    def test_completed_four_worker_run_rejects_ten_worker_settings(self):
+        root=driver.REPO/'runs/autowork_paper_plane_baselines_part1of2'
+        if not(root/'manifest.json').exists():self.skipTest('Completed cohort not available')
+        job=json.loads((root/'manifest.json').read_text())['jobs'][0]
+        source=next((root/job['id']).glob('attempt_*'))
+        reference=driver.config(job['config'])
+        reference['save_intermediate_checkpoints']=False
+        _,first,last=job['label'].split('_')
+        four={**job,'treatment':'plane','segment':'1918764220984209654',
+              'first':int(first),'stop':int(last)+1,'num_workers':4}
+        original=driver.config
+        def effective(path):
+            if str(path)==job['config']:return copy.deepcopy(reference)
+            c=original(path);c['num_workers']=4;return c
+        with patch.object(driver,'config',side_effect=effective):
+            self.assertIsNotNone(driver.completed_job(source,four))
+        def wrong(path):
+            return copy.deepcopy(reference)if str(path)==job['config']else original(path)
+        with patch.object(driver,'config',side_effect=wrong),self.assertRaisesRegex(ValueError,'num_workers'):
+            driver.completed_job(source,four)
 
 
 if __name__ == '__main__':

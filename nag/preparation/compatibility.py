@@ -1,4 +1,4 @@
-"""Exact, reviewed preparation-only hash allowance; no model/training waiver."""
+"""Exact launcher-only compatibility identities; no numerical-kernel waiver."""
 import json
 
 from .jobs import REPO
@@ -20,22 +20,30 @@ VALIDATION_PATHS = {
     'nag/scripts/generalized_ellipsoid_preparation.py',
     'nag/scripts/paper_sphere_baselines.py',
 }
+WORKER_LEDGER = REPO / 'docs/compatibility/final_worker_policy_v1.json'
+WORKER_PATHS = VALIDATION_PATHS | {
+    'nag/preparation/jobs.py',
+    'nag/scripts/paper_final_baselines.py',
+}
 
 
 def reviewed_validation_snapshot(snapshot):
-    """Canonicalize only an exact reviewed validator patch, never fitting code.
+    """Canonicalize only exact reviewed launcher revisions, never fitting code.
 
     Historical metadata stays byte-for-byte unchanged. The ledger records both
-    actual source hashes and the earlier compatibility identities. All four
-    current files must match the reviewed patch before any alias can apply;
-    an additional edit disables the allowance rather than broadening it.
+    actual source hashes and the earlier compatibility identities. Every file
+    in a reviewed revision must match before any of its aliases can apply;
+    an additional edit disables that allowance rather than broadening it.
+    Worker-policy changes affect training and are explicit in job metadata;
+    this is not a claim of identical four- and ten-worker random streams.
     """
     from .jobs import sha
-    ledger = json.loads(VALIDATION_LEDGER.read_text())
-    if ledger.get('schema') != 1 or set(ledger.get('files', {})) != VALIDATION_PATHS:
-        raise ValueError('Invalid optional-mask validation compatibility ledger')
-    files = ledger['files']
-    if any(sha(REPO / path) != entry['after'] for path, entry in files.items()):
-        return dict(snapshot)
-    return {path: files[path]['before'] if path in files and digest == files[path]['after'] else digest
-            for path, digest in snapshot.items()}
+    for path, expected in [(WORKER_LEDGER, WORKER_PATHS), (VALIDATION_LEDGER, VALIDATION_PATHS)]:
+        ledger = json.loads(path.read_text())
+        if ledger.get('schema') != 1 or set(ledger.get('files', {})) != expected:
+            raise ValueError('Invalid launcher compatibility ledger')
+        files = ledger['files']
+        if all(sha(REPO / p) == entry['after'] for p, entry in files.items()):
+            return {p: files[p]['before'] if p in files and digest == files[p]['after'] else digest
+                    for p, digest in snapshot.items()}
+    return dict(snapshot)
