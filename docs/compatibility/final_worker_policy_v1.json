@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reason": "Launcher-only worker-policy changes and twelve-hour scheduling defaults preserve preparation and existing run metadata. Four-worker training is explicitly different: job IDs, command overrides, policy hashes and saved configurations separate it from ten-worker results. The scheduling-default update changes only how many jobs may start in an invocation, not training settings. No fitting, model, loss, sampling-budget or historical artifact changes.",
+  "reason": "Launcher-only worker-policy changes, twelve-hour scheduling defaults and explicit train-only interval scheduling exclusions preserve preparation and existing run metadata. The current policy returns final scenes to ten workers; four-worker training remains an explicitly separate cohort. Scheduling exclusions retain full historical manifests while skipping every repeat/layout of the selected interval. No fitting, model, loss, sampling-budget or historical artifact changes.",
   "files": {
     "nag/preparation/jobs.py": {
       "before": "187c5b9c60efd81042846268f530ba925e8c98037729a9ab69fe258c79434e33",
@@ -19,8 +19,8 @@
     },
     "nag/scripts/generalized_ellipsoid_preparation.py": {
       "before": "6bae22c8cc875256fa6313e58ebc1219c3a9a9033d9385ed5636e2e8c985b93a",
-      "previous": "7735a4993d6e57ec5873fa789e187413bfa5d786a351a66ecc4fee3f6d118c80",
-      "after": "d3017264b28429f1f090e8e184245006dc4cd9c550d6044fecef8337761f37e4"
+      "previous": "d3017264b28429f1f090e8e184245006dc4cd9c550d6044fecef8337761f37e4",
+      "after": "fd906d7b930ffeb6d4c319dc7b9e2aa55de596881648f96dd4d0b6960a40961d"
     },
     "nag/scripts/paper_sphere_baselines.py": {
       "before": "166143400235d205d8ffe66f72c6a9740896d567f90e21fb80a24b2059543658",

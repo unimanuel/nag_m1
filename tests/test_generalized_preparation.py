@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -76,6 +77,12 @@ class GeneralizedPreparationTests(unittest.TestCase):
             with patch.object(cli.argparse.ArgumentParser,'parse_args',autospec=True,side_effect=check), \
                     patch.object(sys,'argv',['driver','train','--dry-run',*flags]),self.assertRaises(Parsed):
                 cli.main()
+
+    def test_scheduling_exclusions_are_not_applied_to_preparation(self):
+        with patch.object(sys,'argv',['driver','prepare','--skip-intervals','W324_96_161']), \
+                contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit)as error:
+            cli.main()
+        self.assertEqual(error.exception.code,2)
 
     def test_discovery_deduplicates_variants_and_uses_full_identity(self):
         with tempfile.TemporaryDirectory(prefix='autowork_job_test_') as d:
@@ -445,20 +452,29 @@ class GeneralizedPreparationTests(unittest.TestCase):
     def test_worker_policy_rejects_unrecorded_or_changed_override(self):
         cfg=REPO/'config/waymo/autowork_paper-final/anything.yaml'
         segment='3247914894323111613'
-        job={'config':str(cfg),**training_worker_override(cfg,segment,10)}
-        assert_training_worker_policy(job,segment,10)
-        for key,value in [('num_workers',10),('worker_policy_sha256','changed')]:
-            wrong=copy.deepcopy(job);wrong[key]=value
-            with self.assertRaisesRegex(ValueError,'worker policy changed'):
-                assert_training_worker_policy(wrong,segment,10)
-        with self.assertRaises(ValueError):
-            assert_training_worker_policy({'config':str(cfg)},segment,10)
+        with patch('preparation.jobs.FINAL_WORKER_POLICY',REPO/'tests/fixtures/final_four_worker_policy.json'):
+            job={'config':str(cfg),**training_worker_override(cfg,segment,10)}
+            assert_training_worker_policy(job,segment,10)
+            for key,value in [('num_workers',10),('worker_policy_sha256','changed')]:
+                wrong=copy.deepcopy(job);wrong[key]=value
+                with self.assertRaisesRegex(ValueError,'worker policy changed'):
+                    assert_training_worker_policy(wrong,segment,10)
+            with self.assertRaises(ValueError):
+                assert_training_worker_policy({'config':str(cfg)},segment,10)
+
+    def test_current_ten_worker_policy_rejects_old_four_worker_jobs(self):
+        cfg=REPO/'config/waymo/autowork_paper-final/anything.yaml'
+        old={'config':str(cfg),'num_workers':4,'source_num_workers':10,
+             'worker_policy_path':str(FINAL_WORKER_POLICY),'worker_policy_sha256':'old'}
+        with self.assertRaisesRegex(ValueError,'worker policy changed'):
+            assert_training_worker_policy(old,'3247914894323111613',10)
 
     def test_worker_policy_edit_invalidates_four_worker_jobs_without_changing_source_yamls(self):
         cfg=REPO/'config/waymo/autowork_paper-final/anything.yaml'
         segment='3247914894323111613'
         with tempfile.TemporaryDirectory(prefix='autowork_worker_test_') as d:
             path=Path(d)/'policy.json';doc=json.loads(FINAL_WORKER_POLICY.read_text())
+            doc['segments'][segment]=4
             path.write_text(json.dumps(doc))
             with patch('preparation.jobs.FINAL_WORKER_POLICY',path):
                 job={'config':str(cfg),**training_worker_override(cfg,segment,10)}
@@ -482,8 +498,46 @@ class GeneralizedPreparationTests(unittest.TestCase):
         self.assertEqual(changed,original+['--num-workers','4'])
         self.assertNotIn('--num-workers',original)
 
+    def test_train_exclusion_skips_all_selected_jobs_without_changing_manifest(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_exclusion_test_') as d:
+            root=Path(d);config=root/'config.yaml';config.write_text('example')
+            geometry=root/'ellipsoid.json';geometry.write_text('{}')
+            (root/'verification.json').write_text('{}')
+            jobs=[PreparationJob('3247914894323111613',first,stop,1,'','','',(32,24),(16,12),'','',())
+                  for first,stop in [(42,97),(96,162)]]
+            planned=[{'id':f'autowork_{j.uid}','uid':j.uid,'label':j.label,
+                      'config':str(config),'config_sha256':hashlib.sha256(config.read_bytes()).hexdigest(),
+                      'geometry':str(geometry),'geometry_sha256':hashlib.sha256(geometry.read_bytes()).hexdigest()}
+                     for j in jobs]
+            args=SimpleNamespace(training_root=root/'autowork_training',output_root=root,
+                cloud_root=root,verification_root=root,max_hours=12.,dry_run=False,
+                skip_intervals=['W324_96_161'])
+            def execute(command,**kwargs):Path(command[-1]).mkdir(parents=True)
+            with patch.object(cli,'REPO',root),patch.object(cli,'training_jobs',return_value=planned), \
+                    patch.object(cli,'code_signature',return_value={}), \
+                    patch('paper_sphere_baselines.code_snapshot',return_value={}), \
+                    patch.object(cli,'settings',return_value={'num_workers':10}), \
+                    patch.object(cli,'training_command',side_effect=lambda j,out:[j['id'],str(out)]), \
+                    patch.object(cli,'training_completed',return_value={}) as validated, \
+                    patch.object(cli.subprocess,'run',side_effect=execute) as launched, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                cli.train(jobs,args)
+                self.assertEqual(launched.call_count,1)
+                self.assertEqual(launched.call_args.args[0][0],planned[0]['id'])
+                self.assertEqual(validated.call_count,1)
+                saved=(args.training_root/'manifest.json').read_bytes()
+                self.assertEqual(json.loads(saved)['jobs'],planned)
+                cli.train(jobs,args)
+                self.assertEqual(launched.call_count,1)
+                self.assertEqual((args.training_root/'manifest.json').read_bytes(),saved)
+                args.skip_intervals=['W324_99_999']
+                with self.assertRaises(ValueError):cli.train(jobs,args)
+                self.assertEqual((args.training_root/'manifest.json').read_bytes(),saved)
+
     def test_ellipsoid_four_worker_validation_cannot_reuse_archived_ten_worker_run(self):
         root=REPO/'runs/autowork_final_ellipsoid_W324_10workers'
+        if not(root/'manifest.json').is_file():
+            root=Path('/mnt/d/CodingD/CGProjectD/nagRunsFromC/autowork_final_ellipsoid_W324_10workers')
         if not(root/'manifest.json').is_file():self.skipTest('Archived W324 cohort not available')
         old=json.loads((root/'manifest.json').read_text())['jobs'][0]
         source=root/old['id']/'attempt_001'

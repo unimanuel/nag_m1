@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "purpose": "Matched final-scene training workers; preparation YAMLs and fitted geometry remain unchanged. Four-worker jobs are a separate cohort, not equivalent random streams to ten-worker jobs.",
+  "purpose": "18 October: restore ten workers for matched final-scene training. Four-worker results remain a separate cohort. Default W324 launchers exclude 96-161 for resource/runtime reasons, across all backgrounds; preparation YAMLs and fitted geometry stay unchanged.",
   "segments": {
     "12511696717465549299": 10,
     "14133920963894906769": 10,
     "2036908808378190283": 10,
-    "3247914894323111613": 4,
-    "3441838785578020259": 4,
-    "9521653920958139982": 4,
-    "9758342966297863572": 4
+    "3247914894323111613": 10,
+    "3441838785578020259": 10,
+    "9521653920958139982": 10,
+    "9758342966297863572": 10
   }
 }

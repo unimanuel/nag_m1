@@ -8,7 +8,7 @@ compactness, radius-scale, clipping or manual vertical enlargement is enabled.
 
 Existing ego files, caches, renders and manifests are never overwritten.
 For the current matched static-scene training worker overrides and restart
-commands, see [the final-scene worker policy](final_scene_worker_policy.md).
+commands, see [the final-scene worker policy](final_ten_worker_restart.md).
 This affects training only, not preparation YAMLs or fitted geometry.
 The historical ego numerical fixtures were frozen before refactoring under:
 
@@ -303,6 +303,11 @@ new ellipsoid queues running concurrently. Do not run other GPU training scripts
 at the same time. Completed jobs are skipped and failed attempts are preserved.
 The default `--max-hours 12` is a between-job invocation limit, not a hard
 timeout of an active training. Rerun the same selection to finish.
+`--skip-intervals` is an explicit train-only scheduling exclusion: it skips all
+repeats/layouts of those intervals without changing the full historical cohort
+manifest, observations, geometry or preparation frame selection. Unknown
+intervals fail rather than being silently ignored. The current W324 wrapper
+uses it for 96–161; omit that interval from every background comparison.
 
 ## Missing inputs and nearly stationary cameras
 

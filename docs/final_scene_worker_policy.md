@@ -1,4 +1,11 @@
-# Matched static-scene DataLoader policy (17 October 2026)
+# Historical four-worker static-scene policy (17 October 2026)
+
+**Superseded on 18 October:** all selected final intervals now use ten workers;
+W324 96–161 is omitted by the default ellipsoid and plane/sphere launchers.
+Use [the current ten-worker restart instructions](final_ten_worker_restart.md).
+The four-worker wrappers now refuse to launch; their existing results and
+manifests are unchanged. The remainder of this document records the previous
+policy and its validation, not current run instructions.
 
 W324 96–161 exhausted the earlier WSL RAM/swap allowance with ten workers.
 The user requested four workers for W324 and the remaining static scenes,

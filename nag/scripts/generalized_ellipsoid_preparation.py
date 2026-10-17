@@ -180,6 +180,7 @@ def train(jobs, args):
     from paper_sphere_baselines import duration_seconds, code_snapshot
     root = args.training_root
     planned = training_jobs(jobs,args.output_root,args.cloud_root)
+    excluded = {j.uid for j in select(jobs,args.skip_intervals)} if args.skip_intervals else set()
     context = {'code':code_snapshot(), 'preparation_code':code_signature(), 'gate':sha(args.verification_root/'verification.json'),
                'versions': {p:importlib.metadata.version(p) for p in ['numpy','scipy','torch','pytorch-lightning']},
                'executable':sys.executable, 'environment':{k:os.environ.get(k) for k in ['CUDA_VISIBLE_DEVICES','CUBLAS_WORKSPACE_CONFIG','OMP_NUM_THREADS','OPENBLAS_NUM_THREADS']}}
@@ -187,11 +188,15 @@ def train(jobs, args):
     if root.exists() and any(root.iterdir()) and (not (root/'manifest.json').exists() or json.loads((root/'manifest.json').read_text())!=manifest):
         raise ValueError('Unowned/conflicting training output; use another autowork root')
     for job in planned:
+        if job['uid'] in excluded:
+            print('EXCLUDED by explicit scheduling selection: '+job['id'],flush=True)
+            continue
         workers=job.get('num_workers',settings(job['config']).get('num_workers'))
         print(f'{job["label"]}: effective training workers={workers}',flush=True)
         print(shlex.join(training_command(job,root/job['id']/'attempt_001')),flush=True)
     if args.dry_run:
-        print(f'{len(planned)} planned trainings; no files or training created.')
+        eligible=sum(j['uid']not in excluded for j in planned)
+        print(f'{eligible} eligible trainings; {len(planned)-eligible} explicitly excluded; no files or training created.')
         return
     root.mkdir(parents=True,exist_ok=True)
     lock_root=REPO/'runs/autowork_generalized_background_training_lock'
@@ -204,6 +209,8 @@ def train(jobs, args):
         if not (root/'manifest.json').exists():write_json(root/'manifest.json',manifest)
         start = time.monotonic()
         for job in planned:
+            if job['uid'] in excluded:
+                continue
             attempts = sorted((root/job['id']).glob('attempt_*'))
             good = [p for p in attempts if training_completed(p,job) is not None]
             if len(good)>1:raise ValueError('Multiple completed attempts')
@@ -230,6 +237,8 @@ def main():
     group.add_argument('--config-dir',type=Path)
     group.add_argument('--config-paths',nargs='+',type=Path)
     p.add_argument('--intervals',nargs='+')
+    p.add_argument('--skip-intervals',nargs='+',default=[],
+                   help='Train only: do not schedule these intervals; retain the original full-cohort manifest')
     p.add_argument('--cloud-root',type=Path,default=CLOUD_ROOT)
     p.add_argument('--raw-root',type=Path,default=Path('/mnt/d/CGProjectData/waymo/raw'))
     p.add_argument('--data-root',type=Path)
@@ -242,6 +251,7 @@ def main():
     p.add_argument('--max-hours',type=float,default=12.)
     p.add_argument('--dry-run',action='store_true')
     args=p.parse_args()
+    if args.skip_intervals and args.stage!='train':p.error('skip-intervals is only supported for train')
     from preparation.compatibility import reviewed_validation_snapshot
     raw_code=code_signature(validation_compatible=False)
     if reviewed_validation_snapshot(raw_code)!=raw_code:

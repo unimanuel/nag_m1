@@ -256,22 +256,25 @@ class FinalBaselineTests(unittest.TestCase):
 
     def test_worker_policy_is_matched_across_all_final_treatments(self):
         items=driver.intervals()
-        jobs=driver.make_jobs(items,{label:[]for label in items})
-        for label,item in items.items():
-            group=[j for j in jobs if j['label']==label]
-            four=label.startswith(('W324_','W344_','W952_','W975_'))
-            self.assertEqual({j.get('num_workers',10)for j in group},{4 if four else 10})
-            self.assertEqual(driver.worker_output_suffix({label:item}),'_4workers'if four else'')
-            for job in group:
-                driver.assert_job_worker_policy(job)
-                cmd=driver.command(job,Path('out'))
-                if four:
-                    self.assertEqual(cmd[-2:],['--num-workers','4'])
-                    self.assertTrue(job['id'].endswith('_workers4'))
-                    self.assertIn('worker_policy_sha256',job)
-                else:
-                    self.assertNotIn('--num-workers',cmd)
-                    self.assertNotIn('num_workers',job)
+        for policy in [driver.REPO/'config/waymo/autowork_paper-final_worker_policy.json',
+                       driver.REPO/'tests/fixtures/final_four_worker_policy.json']:
+            with patch('preparation.jobs.FINAL_WORKER_POLICY',policy):
+                jobs=driver.make_jobs(items,{label:[]for label in items})
+                for label,item in items.items():
+                    group=[j for j in jobs if j['label']==label]
+                    four=policy.parent.name=='fixtures' and label.startswith('W324_')
+                    self.assertEqual({j.get('num_workers',10)for j in group},{4 if four else 10})
+                    self.assertEqual(driver.worker_output_suffix({label:item}),'_4workers'if four else'')
+                    for job in group:
+                        driver.assert_job_worker_policy(job)
+                        cmd=driver.command(job,Path('out'))
+                        if four:
+                            self.assertEqual(cmd[-2:],['--num-workers','4'])
+                            self.assertTrue(job['id'].endswith('_workers4'))
+                            self.assertIn('worker_policy_sha256',job)
+                        else:
+                            self.assertNotIn('--num-workers',cmd)
+                            self.assertNotIn('num_workers',job)
 
     def test_completed_four_worker_run_rejects_ten_worker_settings(self):
         root=driver.REPO/'runs/autowork_paper_plane_baselines_part1of2'

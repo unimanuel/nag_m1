@@ -2,12 +2,11 @@
 
 Prepared 6 October 2026. No training was started by Codex.
 
-**17 October update:** effective training workers now follow the matched
-[final-scene policy](../docs/final_scene_worker_policy.md): W125/W141/W203 use
-ten; W324/W344/W952/W975 use four for every background treatment. Source YAMLs
-and preparation geometry stay unchanged; four-worker commands use recorded
-CLI overrides and separate `_4workers` output roots. The original template
-description below concerns YAML contents, not the new effective worker count.
+**18 October update:** all selected final scenes again use ten workers for every
+background treatment. W324 96–161 is excluded for runtime/resource reasons,
+not reconstruction quality, from the default ellipsoid and baseline queues.
+Four-worker results remain separate. Source YAMLs and preparation geometry are
+unchanged. See [the current restart instructions](../docs/final_ten_worker_restart.md).
 
 ## What existed, and why fresh results are needed
 
@@ -143,16 +142,17 @@ bash run_paper_final_baselines_W952.sh
 ```
 
 Each launcher selects all its intervals and three repeats in all three modes.
-W125, W141, W324 and W344 each contain 36 jobs; W952 contains 27. These are
+W125, W141 and W344 each contain 36 jobs; W324 and W952 contain 27. The W324
+wrapper excludes 96–161 across all three baseline treatments. These are
 **resumable queues**, not a promise that a whole segment finishes in one
 invocation. The driver stops between jobs when elapsed time plus the next
 buffered estimate exceeds twelve hours. Rerun the same script to continue.
 `--max-hours 6` requests an earlier scheduling stop.
 
-**W324 warning:** its 96-161 historical regular-sphere job took about 10.15
-hours before a 35% allowance. That old timing is not a reliable prediction of
-the new sampler, but one active job might exceed the invocation budget. The
-driver requires explicit opt-in before starting an estimated-over-budget job:
+**Historical W324 timing:** the now-excluded 96–161 regular-sphere job took
+about 10.15 hours before a 35% allowance. The current wrapper does not schedule
+that interval. For any other estimated-over-budget job, the driver still
+requires explicit opt-in:
 
 ```bash
 bash run_paper_final_baselines_W324.sh --allow-long-job
