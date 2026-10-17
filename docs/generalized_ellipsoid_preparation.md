@@ -7,6 +7,9 @@ the exact-zero v2 sampling-floor preservation/refinement policy. No upright,
 compactness, radius-scale, clipping or manual vertical enlargement is enabled.
 
 Existing ego files, caches, renders and manifests are never overwritten.
+For the current matched static-scene training worker overrides and restart
+commands, see [the final-scene worker policy](final_scene_worker_policy.md).
+This affects training only, not preparation YAMLs or fitted geometry.
 The historical ego numerical fixtures were frozen before refactoring under:
 
 ```text
@@ -131,9 +134,10 @@ filter and needs no path-handling change.
 
 The reviewed patch changes validation and signature plumbing only. An explicit
 [SHA-256 ledger](compatibility/optional_mask_validation_v1.json) records the
-before/after hashes of its four Python files. Code signatures use their earlier
-compatibility identities only when **all four current files** match those exact
-reviewed hashes. Unlisted code changes and subsequent edits remain detectable;
+before/after hashes of its four Python files. The later worker-policy revision
+adds a separate six-file ledger, retaining the original ledger unchanged. Code
+signatures use earlier compatibility identities only when **every current file
+in a reviewed revision** matches its exact hashes. Unlisted changes remain detectable;
 no fitter, model, data, configuration or recipe is exempted. The CLI announces
 the allowance. Raw source hashes remain available with
 `code_signature(validation_compatible=False)` and in the ledger. Existing

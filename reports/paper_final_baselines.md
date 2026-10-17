@@ -2,6 +2,13 @@
 
 Prepared 6 October 2026. No training was started by Codex.
 
+**17 October update:** effective training workers now follow the matched
+[final-scene policy](../docs/final_scene_worker_policy.md): W125/W141/W203 use
+ten; W324/W344/W952/W975 use four for every background treatment. Source YAMLs
+and preparation geometry stay unchanged; four-worker commands use recorded
+CLI overrides and separate `_4workers` output roots. The original template
+description below concerns YAML contents, not the new effective worker count.
+
 ## What existed, and why fresh results are needed
 
 `config/waymo/final` contains **25 intervals from seven parent segments**:
