@@ -301,8 +301,8 @@ Use a distinct `--training-root` for each different interval selection; changing
 the selection in an existing manifest is rejected. A shared lock prevents two
 new ellipsoid queues running concurrently. Do not run other GPU training scripts
 at the same time. Completed jobs are skipped and failed attempts are preserved.
-`--max-hours 9` is a between-job invocation limit, not a hard timeout of an
-active training. Rerun the same selection to finish.
+The default `--max-hours 12` is a between-job invocation limit, not a hard
+timeout of an active training. Rerun the same selection to finish.
 
 ## Missing inputs and nearly stationary cameras
 

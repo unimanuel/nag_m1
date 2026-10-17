@@ -124,7 +124,7 @@ bash run_paper_final_baselines.sh --audit-only --historical
 # Optional preview: validates inputs and prints commands, without training/files.
 DRY_RUN=1 bash run_paper_final_baselines_W125.sh
 
-# Start with W125; one invocation has a nine-hour scheduling budget.
+# Start with W125; one invocation has a twelve-hour scheduling budget.
 bash run_paper_final_baselines_W125.sh
 
 # Check status. Rerun the same launcher until all 36 W125 jobs are complete.
@@ -146,7 +146,7 @@ Each launcher selects all its intervals and three repeats in all three modes.
 W125, W141, W324 and W344 each contain 36 jobs; W952 contains 27. These are
 **resumable queues**, not a promise that a whole segment finishes in one
 invocation. The driver stops between jobs when elapsed time plus the next
-buffered estimate exceeds nine hours. Rerun the same script to continue.
+buffered estimate exceeds twelve hours. Rerun the same script to continue.
 `--max-hours 6` requests an earlier scheduling stop.
 
 **W324 warning:** its 96-161 historical regular-sphere job took about 10.15

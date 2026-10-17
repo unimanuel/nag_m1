@@ -64,6 +64,19 @@ def configs(base, root):
 
 
 class GeneralizedPreparationTests(unittest.TestCase):
+    def test_training_budget_defaults_to_twelve_hours_and_accepts_override(self):
+        class Parsed(Exception):
+            pass
+        original=cli.argparse.ArgumentParser.parse_args
+        for flags,expected in [((),12.),(('--max-hours','6.5'),6.5)]:
+            def check(parser):
+                args=original(parser)
+                self.assertEqual(args.max_hours,expected)
+                raise Parsed
+            with patch.object(cli.argparse.ArgumentParser,'parse_args',autospec=True,side_effect=check), \
+                    patch.object(sys,'argv',['driver','train','--dry-run',*flags]),self.assertRaises(Parsed):
+                cli.main()
+
     def test_discovery_deduplicates_variants_and_uses_full_identity(self):
         with tempfile.TemporaryDirectory(prefix='autowork_job_test_') as d:
             base=Path(d);root=dataset(base);paths=configs(base,root)

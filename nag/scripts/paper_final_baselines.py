@@ -346,7 +346,7 @@ def main():
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--summary', action='store_true')
     p.add_argument('--output-root', type=Path)
-    p.add_argument('--max-hours', type=float, default=9.)
+    p.add_argument('--max-hours', type=float, default=12.)
     p.add_argument('--allow-long-job', action='store_true', help='Explicitly allow one estimated-over-budget job per invocation')
     args = p.parse_args()
     args.data_root = REPO / 'data/datasets/waymo'

@@ -67,8 +67,8 @@ any command with `DRY_RUN=1` to inspect commands without training or files.
 The queues have 24, 24, 18 and 6 jobs, respectively: three seed-42 repeats of
 regular and Visible-UV per ready interval. Repeat the identical command after
 a budget stop; completed jobs in that four-worker queue are skipped. The
-default nine-hour ellipsoid budget remains an elapsed-time check between jobs,
-not a guarantee that an active job finishes within nine hours.
+default twelve-hour ellipsoid budget is an elapsed-time check between jobs,
+not a guarantee that an active job finishes within twelve hours.
 
 Output roots under `runs/`:
 
@@ -115,8 +115,8 @@ Default four-worker baseline roots also end in `_4workers`, such as
 remain unchanged. Both the audit and dry-run output state effective workers.
 
 The baseline scheduler still uses conservative historical estimates. W324
-96–161 has an old single-run estimate above the nine-hour budget; this is not
-a reliable prediction for four workers. If scheduling refuses even the next
+96–161 has an old buffered single-run estimate above the twelve-hour budget;
+this is not a reliable prediction for four workers. If scheduling refuses even the next
 individual job, inspect timings and explicitly use `--allow-long-job` to allow
 one estimated-over-budget job per invocation. Active jobs are never killed.
 

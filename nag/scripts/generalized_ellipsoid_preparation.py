@@ -239,7 +239,7 @@ def main():
     p.add_argument('--verify-level',choices=['cached','end_to_end','all'],default='all')
     p.add_argument('--sphere-run-map',type=Path,help='JSON full-job-identity to completed regular-sphere run path')
     p.add_argument('--training-root',type=Path,default=REPO/'runs/autowork_final_ellipsoid_benchmarks')
-    p.add_argument('--max-hours',type=float,default=9.)
+    p.add_argument('--max-hours',type=float,default=12.)
     p.add_argument('--dry-run',action='store_true')
     args=p.parse_args()
     from preparation.compatibility import reviewed_validation_snapshot

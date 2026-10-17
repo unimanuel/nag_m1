@@ -18,6 +18,20 @@ import paper_final_baselines as driver
 
 
 class FinalBaselineTests(unittest.TestCase):
+    def test_training_budget_defaults_to_twelve_hours_and_accepts_override(self):
+        class Parsed(Exception):
+            pass
+        original = driver.argparse.ArgumentParser.parse_args
+        for flags, expected in [((), 12.), (('--max-hours', '6.5'), 6.5)]:
+            def check(parser):
+                args = original(parser)
+                self.assertEqual(args.max_hours, expected)
+                raise Parsed
+            with patch.object(driver.argparse.ArgumentParser, 'parse_args', autospec=True, side_effect=check), \
+                    patch.object(sys, 'argv', ['driver', '--segment', 'W125', '--dry-run', *flags]), \
+                    self.assertRaises(Parsed):
+                driver.main()
+
     def test_all_75_real_yamls_match_ego_template_and_treatments(self):
         items = driver.intervals()
         self.assertEqual(len(items), 25)
@@ -212,12 +226,19 @@ class FinalBaselineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='autowork_final_test_') as directory:
             base = Path(directory)
             jobs = [{'id': f'autowork_fake_{n}', 'label': 'W125_0_1', 'treatment': 'plane',
-                     'config': 'fake.yaml', 'buffered_seconds': 11 * 3600} for n in range(2)]
+                     'config': 'fake.yaml', 'buffered_seconds': 13 * 3600} for n in range(2)]
             _, stopped = self.exercise_batch(base, jobs)
             stopped.assert_not_called()
             root, allowed = self.exercise_batch(base, jobs, ['--allow-long-job'])
             self.assertEqual(allowed.call_count, 1)
             self.assertFalse((root / jobs[1]['id']).exists())
+
+    def test_default_budget_admits_eleven_hour_estimate_without_opt_in(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_final_test_') as directory:
+            job = {'id': 'autowork_fake', 'label': 'W125_0_1', 'treatment': 'plane',
+                   'config': 'fake.yaml', 'buffered_seconds': 11 * 3600}
+            _, launched = self.exercise_batch(Path(directory), [job])
+            self.assertEqual(launched.call_count, 1)
 
     def test_scheduler_learns_duration_only_from_completed_same_treatment(self):
         with tempfile.TemporaryDirectory(prefix='autowork_final_test_') as directory:
