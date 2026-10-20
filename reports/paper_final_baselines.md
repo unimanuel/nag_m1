@@ -2,6 +2,11 @@
 
 Prepared 6 October 2026. No training was started by Codex.
 
+**20 October update:** all 120 selected ellipsoid trainings are complete across
+20 intervals. Matched static sphere/plane baselines have not yet been trained.
+Use the [current comparison and seven-queue handoff](static_final_ellipsoid_findings_2026-10-20.md)
+for results, ready-only W203/W975 wrappers, storage limits and D: output options.
+
 **18 October update:** all selected final scenes again use ten workers for every
 background treatment. W324 96–161 is excluded for runtime/resource reasons,
 not reconstruction quality, from the default ellipsoid and baseline queues.
@@ -80,9 +85,10 @@ resolution or upright mapping treatment is introduced. The three repeats per
 treatment measure same-seed nondeterminism, not independent-seed variability.
 
 Each interval has nine jobs. All 25 would therefore require **225 trainings**
-for these three treatments. The 21 currently ready intervals account for 189.
-This is not yet the complete five-treatment comparison: ellipsoid and
-Ellipsoid Visible-UV preparation must be added separately.
+for these three treatments. There are 21 depth-ready intervals, but W324 96–161
+is deferred for resources: the selected 20 intervals require **180 baselines**.
+Their 120 ellipsoid/Visible-UV trainings are now complete. The matched baseline
+jobs will complete the five-treatment comparison for this selection.
 
 ## Readiness and missing inputs
 
@@ -130,15 +136,17 @@ bash run_paper_final_baselines_W125.sh
 bash run_paper_final_baselines_W125.sh --summary
 ```
 
-The five complete-input segments have these launchers. Run **one at a time**,
+The selected complete-input intervals use these seven queues. Run **one at a time**,
 not together with another training script:
 
 ```bash
 bash run_paper_final_baselines_W125.sh
 bash run_paper_final_baselines_W141.sh
+bash run_paper_final_baselines_W203_ready.sh
 bash run_paper_final_baselines_W324.sh
 bash run_paper_final_baselines_W344.sh
 bash run_paper_final_baselines_W952.sh
+bash run_paper_final_baselines_W975_ready.sh
 ```
 
 Each launcher selects all its intervals and three repeats in all three modes.
@@ -171,6 +179,9 @@ bash run_paper_final_baselines.sh --intervals W203_3_58
 bash run_paper_final_baselines.sh --intervals W975_175_195
 ```
 
+The equivalent `_W203_ready.sh` and `_W975_ready.sh` wrappers above freeze these
+same explicit selections and default roots; they do not expand after depth repair.
+
 After consistent input restoration, add only the missing intervals:
 
 ```bash
@@ -190,7 +201,7 @@ Default segment outputs:
 ```text
 C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W125
 C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W141
-C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W324
+C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W324_without_96_161
 C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W344
 C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W952
 ```
@@ -212,18 +223,14 @@ not rewritten. Summary commands do not start training.
 
 ## Ellipsoid stage and scientific interpretation
 
-Only W125, W191 and W254 currently have raw point-cloud directories on D:
-and ellipsoid folders. W125 contains the initial PCA ellipsoid experiment,
-not the current legacy-pole reprojection/sampling-floor recipe. The existing
-observation inventory and fit/preparation drivers hardcode the seven W191/W254
-ego intervals. Merely changing the YAML background class would therefore not
-produce a matched ellipsoid benchmark for these 25 intervals.
-
-After these sphere references are available, a separate stage needs the missing
-Waymo downloads/cloud extraction, generalized interval registration and
-observation preparation, reprojection fitting, and the same generic legacy-pole
-sampling-floor preservation policy. The current launcher never substitutes
-an old PCA/AR3 fit or an ego fit for that recipe.
+Ellipsoid preparation has been generalized and verified against all seven ego
+fixtures. The 20 selected static intervals now use corrected-Y-up raw-v4
+initialization, original reprojection/depth fitting and the unchanged generic
+legacy regular-mapping sampling-floor v2 preservation/refinement policy.
+Native sphere references were exported by initialization only; a completed
+sphere training is not required to fit the ellipsoid. All 120 ellipsoid
+trainings have passed completion, effective-settings and geometry checks.
+No earlier PCA/AR3 fit or unrelated ego geometry was substituted.
 
 The non-ego group is genuinely mostly near-static: for example W125 40-93 has
 about 0.013 m cumulative camera motion, and W324 96-161 about 0.008 m. Some
