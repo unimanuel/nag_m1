@@ -33,23 +33,32 @@ C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W203
 C:\Coding\CGProject\nag1\runs\autowork_paper_final_baselines_W975
 ```
 
-New results remain inside those scene folders, separated into two new child
-cohorts per scene:
+At the user's revised request, new results use four independent folders
+directly under `C:\Coding\CGProject\nag1\runs`, not inside those scene folders:
 
 ```text
-autowork_paper_final_baselines_W203/       # existing manifest.json unchanged
-  autowork_restored_baselines/            # new plane/sphere/sphere-UV manifest
-  autowork_restored_ellipsoids/            # new ellipsoid/ellipsoid-UV manifest
-autowork_paper_final_baselines_W975/       # existing manifest.json unchanged
-  autowork_restored_baselines/
-  autowork_restored_ellipsoids/
+runs/
+  autowork_paper_final_baselines_W203/    # original completed cohort unchanged
+  autowork_paper_final_baselines_W975/    # original completed cohort unchanged
+  autowork_restored_baselines_W203/      # 9 new plane/sphere/sphere-UV jobs
+  autowork_restored_ellipsoids_W203/      # 6 new ellipsoid/ellipsoid-UV jobs
+  autowork_restored_baselines_W975/      # 27 new plane/sphere/sphere-UV jobs
+  autowork_restored_ellipsoids_W975/      # 18 new ellipsoid/ellipsoid-UV jobs
 ```
 
-The parent manifests deliberately retain only their original completed jobs.
+The existing scene manifests retain only their original completed jobs.
 Do not expand them, overwrite them or treat their summaries as summaries of
-the child cohorts. Future full-scene analysis must read the parent manifest
-plus both child manifests and join by full segment/frame identity, treatment
-and repeat; it must not pool failed attempts or silently count a job twice.
+the restored cohorts. Future full-scene analysis must read the existing scene
+manifest plus both restored manifests and join by full segment/frame identity,
+treatment and repeat; it must not pool failed attempts or silently count a job twice.
+
+No restored training outputs existed in the earlier nested locations when
+these defaults changed. No existing run was moved or migrated. The new
+launchers no longer depend on the old scene folders being present. If an
+old nested restored path does exist, the launcher stops instead of silently
+starting a duplicate top-level queue. To continue that existing cohort,
+explicitly pass its path with `--output-root` for baseline training or
+`--training-root` for ellipsoid training on every invocation.
 
 All four new geometries, reference spheres, PLY inspection assets and fitting
 diagnostics use a separate namespace, preserving earlier prepared artifacts:
@@ -62,7 +71,7 @@ D:\CGProjectData\waymo\ellipsoids\autowork_restored_final_legacy_v1\
 C: had approximately 89 GiB free when checked. Do not assume all 60 new jobs
 will fit there. Archive more unrelated results before exhausting C:, and
 check free space between invocations. The defaults intentionally honor the
-requested C: scene folders rather than silently changing storage. Explicit
+requested top-level C: run folders rather than silently changing storage. Explicit
 native `--output-root` (baseline training) or `--training-root` (ellipsoid
 training) overrides are possible, but then keep that exact override on every
 retry and summary; never start a duplicate cohort at a second location.
@@ -105,7 +114,7 @@ must be done after preparation. Baseline planning can run before preparation.
 Native stage retries preserve incomplete attempts; input/recipe mismatches
 fail rather than overwriting another cohort or widening compatibility rules.
 
-Baseline progress summaries, after their child cohorts have started:
+Baseline progress summaries, after their restored cohorts have started:
 
 ```bash
 bash run_missing_final_baselines_W203.sh --summary
@@ -143,9 +152,9 @@ Runtime ellipsoid margin remains zero.
 
 The new shell filenames intentionally do not match the historical
 `run_paper_final_baselines*.sh` provenance glob. No numerical, training,
-preparation or existing launcher code is changed, so no compatibility-ledger
+preparation or historical launcher code is changed, so no compatibility-ledger
 waiver or historical manifest rewrite is necessary. The shell wrappers only
-choose explicit intervals and new child output roots.
+choose explicit intervals and independent output roots.
 
 ## Implementation validation
 
@@ -153,12 +162,14 @@ All 49 restored TIFFs decoded and all four preparation-input audits passed.
 The real preparation dry run validated four jobs and the existing release
 certificate without creating references or fitting artifacts. Both real
 baseline dry runs passed, planning nine W203 and 27 W975 jobs with ten workers
-and the requested child output paths. The ellipsoid training wrappers passed
+and the requested output paths. The ellipsoid training wrappers passed
 native-argument forwarding tests; real ellipsoid planning must wait for the
 four new geometry fits and was not claimed as completed here.
 
 The combined preparation, numerical-kernel, baseline and launcher unit suites
-passed 120 tests; shell syntax and whitespace checks passed. Before/after
-SHA256 checks confirmed both renamed parent manifests and the complete
-historical training context remain identical. No child run folders or new
+passed 122 tests; shell syntax and whitespace checks passed. The revised
+launcher tests cover top-level defaults, absent old scene directories, and
+duplicate prevention with both explicit native output-option spellings. Before/after
+SHA256 checks confirmed both renamed scene manifests and the complete
+historical training context remain identical. No restored run folders or new
 preparation outputs were created. No real-data fitting or training was run.

@@ -6,9 +6,9 @@ Prepared 6 October 2026. No training was started by Codex.
 four formerly blocked input audits now pass. The original selected 20-interval
 five-treatment cohort is complete (300 trainings). Use the
 [restored-interval launchers](../docs/restored_final_sequences.md) to add 60
-jobs inside the renamed W203/W975 scene folders, with separate immutable
-child manifests. The historical missing-input table below records the former
-gaps, not the current readiness. W324 96-161 remains a resource exclusion.
+jobs in separate W203/W975 restored-cohort folders directly under `runs`, with
+independent manifests. The historical missing-input table below records the
+former gaps, not the current readiness. W324 96-161 remains a resource exclusion.
 
 **20 October update:** all 120 selected ellipsoid trainings are complete across
 20 intervals. Matched static sphere/plane baselines have not yet been trained.

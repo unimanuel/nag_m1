@@ -1,4 +1,4 @@
-"""Native CLI forwarding and immutable child-cohort checks; never train or fit."""
+"""Native CLI forwarding and independent restored-cohort checks; never train or fit."""
 import json
 import os
 from pathlib import Path
@@ -62,7 +62,7 @@ class MissingFinalSequencesTests(unittest.TestCase):
         self.assertEqual(self.values(tokens, '--output-root'),
             ['/mnt/d/CGProjectData/waymo/ellipsoids/autowork_restored_final_legacy_v1'])
 
-    def test_four_training_queues_use_renamed_parents_and_disjoint_native_manifests(self):
+    def test_four_training_queues_use_top_level_roots_and_disjoint_native_manifests(self):
         selections = {}
         for stage, child in [('baselines', 'autowork_restored_baselines'),
                              ('ellipsoids', 'autowork_restored_ellipsoids')]:
@@ -74,7 +74,9 @@ class MissingFinalSequencesTests(unittest.TestCase):
                 self.assertEqual(self.values(tokens, '--intervals'), expected)
                 parent = self.root / 'runs' / ('autowork_paper_final_baselines_' + scene)
                 flag = '--output-root' if stage == 'baselines' else '--training-root'
-                self.assertEqual(self.values(tokens, flag), [str(parent / child)])
+                output = self.root / 'runs' / (child + '_' + scene)
+                self.assertEqual(self.values(tokens, flag), [str(output)])
+                self.assertEqual(output.parent, self.root / 'runs')
                 self.assertNotEqual(Path(self.values(tokens, flag)[0]), parent)
                 if stage == 'ellipsoids':
                     self.assertEqual(tokens[1], 'train')
@@ -84,7 +86,7 @@ class MissingFinalSequencesTests(unittest.TestCase):
         self.assertEqual(sum(len(v) * (9 if k[0] == 'baselines' else 6)
                              for k, v in selections.items()), 60)
 
-    def test_forwarding_preserves_parent_manifest_bytes_and_creates_no_child_outputs(self):
+    def test_forwarding_preserves_existing_manifests_and_creates_no_outputs(self):
         before = {str(p.relative_to(self.root)): p.read_bytes()
                   for p in self.root.rglob('*') if p.is_file()}
         for stage in ['baselines', 'ellipsoids']:
@@ -95,13 +97,44 @@ class MissingFinalSequencesTests(unittest.TestCase):
                  for p in self.root.rglob('*') if p.is_file()}
         self.assertEqual(before, after)
         self.assertEqual(list(self.root.glob('runs/*/autowork_restored_*')), [])
+        self.assertEqual(list(self.root.glob('runs/autowork_restored_*')), [])
 
-    def test_absent_renamed_parent_is_not_silently_recreated(self):
+    def test_missing_old_scene_does_not_block_or_get_recreated_by_new_queue(self):
         self.parent_manifests[0].unlink()
-        result = self.run_script('run_missing_final_baselines_W203.sh', check=False)
+        self.parent_manifests[0].parent.rmdir()
+        result = self.run_script('run_missing_final_baselines_W203.sh')
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.values(shlex.split(result.stdout), '--output-root'),
+            [str(self.root / 'runs/autowork_restored_baselines_W203')])
+        self.assertFalse(self.parent_manifests[0].parent.exists())
+
+    def test_existing_nested_outputs_block_silent_duplicate_queues(self):
+        for stage, family, flag in [('baselines', 'baselines', '--output-root'),
+                                    ('ellipsoids', 'ellipsoids', '--training-root')]:
+            for scene in LABELS:
+                old = self.root / 'runs' / ('autowork_paper_final_baselines_' + scene) / (
+                    'autowork_restored_' + family)
+                old.mkdir()
+                (old / 'manifest.json').write_text('retained old cohort')
+                script = f'run_missing_final_{stage}_{scene}.sh'
+                rejected = self.run_script(script, check=False)
+                self.assertEqual(rejected.returncode, 2)
+                self.assertIn('Legacy nested restored output exists', rejected.stderr)
+                self.assertEqual(rejected.stdout, '')
+                explicit = shlex.split(self.run_script(script, flag, str(old)).stdout)
+                self.assertEqual(explicit[-2:], [flag, str(old)])
+                equal_form = shlex.split(self.run_script(script, f'{flag}={old}').stdout)
+                self.assertEqual(equal_form[-1], f'{flag}={old}')
+                self.assertEqual((old / 'manifest.json').read_text(), 'retained old cohort')
+        self.assertEqual(list(self.root.glob('runs/autowork_restored_*')), [])
+
+    def test_geometry_override_does_not_bypass_legacy_ellipsoid_training_guard(self):
+        old = self.root / 'runs/autowork_paper_final_baselines_W203/autowork_restored_ellipsoids'
+        old.mkdir()
+        result = self.run_script('run_missing_final_ellipsoids_W203.sh',
+            '--output-root', '/tmp/autowork_geometry_override', check=False)
         self.assertEqual(result.returncode, 2)
-        self.assertIn('Missing renamed scene manifest', result.stderr)
-        self.assertEqual(list(self.root.glob('runs/*/autowork_restored_*')), [])
+        self.assertIn('--training-root explicitly', result.stderr)
 
     def test_invalid_stage_scene_and_combined_training_are_rejected(self):
         for args in [(), ('unknown', 'W203'), ('baseline', 'all'), ('ellipsoid', 'all'),
