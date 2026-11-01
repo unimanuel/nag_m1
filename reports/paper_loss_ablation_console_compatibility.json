@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "scope": "console_streaming_only_v1",
+  "before": "00eb49a36852378216773d070a9cc42540e8e29dc70c3c485b594b06e7b3f050",
+  "after": "bc8f5677cb5105bb6807560439191f84a8ca8300f5a78293d3832bd960dace02",
+  "reason": "Live stdout/stderr tee and terminal progress preservation only. The numerical fitter, geometry, training command and settings are unchanged. Preserve existing preparation/training manifests; reject any other launcher revision."
+}

@@ -99,6 +99,21 @@ completed attempt only after checking success, all final frames, epoch-80
 metrics, settings, calibration, input paths and the exact runtime geometry.
 It records launch markers even if training fails before creating a run folder.
 
+Training stdout and stderr now stream live to the terminal **and** the
+per-attempt `.console.log`. In an interactive terminal, a pseudo-terminal
+preserves native progress-bar/terminal detection; redirected invocations use
+an unbuffered pipe instead. Carriage-return updates are retained, logs are
+flushed as output arrives, and a failed child still stops its queue.
+
+This console-only revision preserves existing prepared/started batches through
+`reports/paper_loss_ablation_console_compatibility.json`: only the exact reviewed
+old/new launcher hashes share the historical launcher identity. No geometry,
+numeric kernel, training setting or other code hash is waived, and existing
+manifests are not rewritten. A further launcher edit disables the allowance.
+Use the same commands and output roots; no re-preparation is required.
+An already-running old launcher does not acquire live output retroactively;
+let its current training finish before restarting its queue with the new code.
+
 ## Output and provenance
 
 ```text
@@ -160,3 +175,10 @@ creating preparation or training roots. The native NAGConfig parser accepted
 all generated configuration overrides, all seven shell launchers passed
 syntax checks, and the production reprojection source retained its exact
 pinned SHA256. No real D0 geometry or new training result is claimed yet.
+
+The console-streaming revision passed 82 combined tests, including live output
+before child exit, stderr/error-code forwarding, carriage returns, split UTF-8,
+terminal detection and non-overwriting logs. A real read-only W191 0–40 dry run
+accepted the existing preparation/training manifests and recognized its
+completed job. No manifest migration, geometry regeneration or training was
+performed for that fix.

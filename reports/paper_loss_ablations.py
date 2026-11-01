@@ -5,6 +5,7 @@ No production code changes. Audit/dry-run/summary never create files or train.
 The main benchmark is reused by identity, never by selecting quality metrics.
 """
 import argparse
+import codecs
 from dataclasses import asdict
 from datetime import datetime
 import fcntl
@@ -14,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shlex
 import subprocess
 import sys
@@ -40,6 +42,8 @@ DEFAULT_PREP=Path('/mnt/d/CGProjectData/waymo/ellipsoids/autowork_paper_loss_abl
 DEFAULT_TRAIN=REPO/'runs/autowork_paper_loss_ablations_v1'
 FIXTURES=Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_v1/ego_fixtures.json')
 GATE=Path('/mnt/d/CGProjectData/waymo/diagnostics/autowork_generalized_preparation_release_v4/verification.json')
+CONSOLE_LEDGER=REPO/'reports/paper_loss_ablation_console_compatibility.json'
+ORIGINAL_LAUNCHER_SHA='00eb49a36852378216773d070a9cc42540e8e29dc70c3c485b594b06e7b3f050'
 
 
 def sha(path):
@@ -52,9 +56,24 @@ def sha(path):
 def load(path):return json.loads(Path(path).read_text())
 
 
+def code_identity(path):
+    """Alias only the exact reviewed console-only launcher revision.
+
+    Historical manifests stay unchanged. Any further launcher edit disables
+    the alias until separately reviewed; no fitting/model hash is waived.
+    """
+    actual=sha(path)
+    if Path(path).resolve()!=Path(__file__).resolve() or not CONSOLE_LEDGER.is_file():return actual
+    ledger=load(CONSOLE_LEDGER)
+    if (ledger.get('scope')=='console_streaming_only_v1' and ledger.get('before')==ORIGINAL_LAUNCHER_SHA
+            and actual==ledger.get('after')):
+        return ORIGINAL_LAUNCHER_SHA
+    return actual
+
+
 def assert_pins(pins):
     for path,digest in pins.items():
-        if sha(path)!=digest:raise ValueError('Frozen input changed: '+path)
+        if code_identity(path)!=digest:raise ValueError('Frozen input changed: '+path)
 
 
 def native_context():
@@ -176,7 +195,7 @@ def inventory(catalog):
         item['estimated_training_seconds']=max(times)*1.35
         items.append(item)
     return dict(schema=1,intervals=items,pins=global_pins,context=native_context(),
-        diagnostic_code={str(p):sha(p) for p in (Path(__file__),REPO/'reports/paper_ablation_kernel.py',
+        diagnostic_code={str(p):code_identity(p) for p in (Path(__file__),REPO/'reports/paper_ablation_kernel.py',
             REPO/'reports/generate_preliminary_background_statistics.py',REPO/'reports/generate_main_background_statistics.py')},
         versions={k:importlib.metadata.version(k) for k in ('numpy','scipy')},executable=sys.executable,
         recipes={'D0':{**asdict(ReprojectionFitConfig()),'reprojection_weight':0.},'D1':asdict(ReprojectionFitConfig()),
@@ -311,6 +330,56 @@ def command(item,cell,out):
 def fits_budget(elapsed,estimated,max_hours):return elapsed+estimated<=max_hours*3600
 
 
+def stream_training(cmd,log_path):
+    """Live stdout/stderr tee, retaining terminal progress bars when possible."""
+    terminal=bool(getattr(sys.stdout,'isatty',lambda:False)())
+    master=slave=None
+    if terminal:
+        import pty
+        import termios
+        master,slave=pty.openpty()
+        try:
+            size=fcntl.ioctl(sys.stdout.fileno(),termios.TIOCGWINSZ,b'\0'*8)
+            fcntl.ioctl(slave,termios.TIOCSWINSZ,size)
+        except OSError:
+            pass
+    target=getattr(sys.stdout,'buffer',None)
+    decoder=codecs.getincrementaldecoder('utf-8')(errors='replace') if target is None else None
+    process=None
+    try:
+        with Path(log_path).open('xb') as log:
+            process=subprocess.Popen(cmd,cwd=REPO,stdout=slave if terminal else subprocess.PIPE,
+                stderr=subprocess.STDOUT,bufsize=0,env={**os.environ,'PYTHONUNBUFFERED':'1'})
+            if slave is not None:os.close(slave);slave=None
+            fd=master if terminal else process.stdout.fileno()
+            while True:
+                ready,_,_=select.select([fd],[],[],.2)
+                if not ready:
+                    if process.poll() is not None:break
+                    continue
+                try:
+                    chunk=os.read(fd,8192)
+                except OSError as exc:
+                    # A closed PTY reports EIO instead of an empty read.
+                    if terminal and exc.errno==5:break
+                    raise
+                if not chunk:break
+                log.write(chunk);log.flush()
+                if target is not None:target.write(chunk);target.flush()
+                else:sys.stdout.write(decoder.decode(chunk));sys.stdout.flush()
+            if decoder is not None:sys.stdout.write(decoder.decode(b'',final=True));sys.stdout.flush()
+            return process.wait()
+    finally:
+        if slave is not None:os.close(slave)
+        if master is not None:os.close(master)
+        if process is not None:
+            if process.poll() is None:
+                process.terminate()
+                try:process.wait(timeout=10)
+                except subprocess.TimeoutExpired:process.kill();process.wait()
+            if process.stdout is not None:process.stdout.close()
+
+
 def train_or_summary(args,plan,cells):
     items={x['label']:x for x in plan['intervals']}
     selected=[c for c in cells if not args.intervals or c['label'] in args.intervals]
@@ -351,9 +420,9 @@ def train_or_summary(args,plan,cells):
             cmd=command(item,cell,out)
             write_json(folder/f'attempt_{n:03d}.launch.json',dict(command=cmd,cell=cell))
             print('TRAIN '+cell['id'],flush=True)
-            with (folder/f'attempt_{n:03d}.console.log').open('w') as log:
-                result=subprocess.run(cmd,cwd=REPO,stdout=log,stderr=subprocess.STDOUT)
-            if result.returncode!=0:raise RuntimeError(f'Training failed; preserved log {log.name}; retry with the same script')
+            log_path=folder/f'attempt_{n:03d}.console.log'
+            returncode=stream_training(cmd,log_path)
+            if returncode!=0:raise RuntimeError(f'Training failed; preserved log {log_path}; retry with the same script')
             if not completed(out,item,cell):raise RuntimeError('Incomplete final outputs; preserve attempt and inspect')
 
 

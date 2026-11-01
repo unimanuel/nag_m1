@@ -70,6 +70,59 @@ class AblationKernelTests(unittest.TestCase):
 
 
 class AblationLauncherTests(unittest.TestCase):
+    def test_live_tee_preserves_progress_stderr_and_exit_status(self):
+        import subprocess
+        real_popen=subprocess.Popen
+        processes=[];seen_alive=[]
+        def spawn(*args,**kwargs):
+            p=real_popen(*args,**kwargs);processes.append(p);return p
+        class Console(io.StringIO):
+            def write(self,text):
+                if 'first' in text:seen_alive.append(processes[0].poll() is None)
+                return super().write(text)
+        script="import os,sys,time; sys.stdout.write('first\\r'); time.sleep(.3); os.write(1,b'\\xe2'); time.sleep(.05); os.write(1,b'\\x82\\xac\\n'); sys.stderr.write('error\\n'); sys.exit(3)"
+        with tempfile.TemporaryDirectory(prefix='autowork_console_test_') as d:
+            path=Path(d)/'console.log';console=Console()
+            with patch.object(driver.subprocess,'Popen',spawn),contextlib.redirect_stdout(console):
+                code=driver.stream_training([sys.executable,'-c',script],path)
+            self.assertEqual(code,3)
+            self.assertEqual(console.getvalue(),'first\r€\nerror\n')
+            self.assertEqual(path.read_bytes(),'first\r€\nerror\n'.encode())
+            self.assertEqual(seen_alive,[True])
+
+    def test_terminal_tee_keeps_child_stdout_a_terminal(self):
+        class Terminal(io.StringIO):
+            def isatty(self):return True
+            def fileno(self):raise OSError('unit-test terminal has no real console fd')
+        with tempfile.TemporaryDirectory(prefix='autowork_console_test_') as d:
+            path=Path(d)/'console.log';console=Terminal()
+            with contextlib.redirect_stdout(console):
+                code=driver.stream_training([sys.executable,'-c',"import sys; print('TTY',sys.stdout.isatty()); print('stderr',file=sys.stderr)"],path)
+            self.assertEqual(code,0)
+            self.assertIn('TTY True',console.getvalue());self.assertIn('stderr',console.getvalue())
+            self.assertIn(b'TTY True',path.read_bytes())
+
+    def test_existing_console_log_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_console_test_') as d:
+            path=Path(d)/'console.log';path.write_bytes(b'keep previous output')
+            with patch.object(driver.subprocess,'Popen') as spawn,self.assertRaises(FileExistsError):
+                driver.stream_training(['unused'],path)
+            spawn.assert_not_called();self.assertEqual(path.read_bytes(),b'keep previous output')
+
+    def test_console_compatibility_is_exact_and_launcher_only(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_console_test_') as d:
+            ledger=Path(d)/'ledger.json';source=Path(driver.__file__)
+            data=dict(scope='console_streaming_only_v1',before=driver.ORIGINAL_LAUNCHER_SHA,after=driver.sha(source))
+            ledger.write_text(json.dumps(data))
+            with patch.object(driver,'CONSOLE_LEDGER',ledger):
+                self.assertEqual(driver.code_identity(source),driver.ORIGINAL_LAUNCHER_SHA)
+                driver.assert_pins({str(source):driver.ORIGINAL_LAUNCHER_SHA})
+                other=Path(d)/'other.py';other.write_text('not the launcher')
+                with self.assertRaises(ValueError):driver.assert_pins({str(other):driver.ORIGINAL_LAUNCHER_SHA})
+                for bad in ({**data,'scope':'anything'}, {**data,'before':'0'*64}, {**data,'after':'0'*64}):
+                    ledger.write_text(json.dumps(bad))
+                    self.assertEqual(driver.code_identity(source),driver.sha(source))
+
     def test_matrix_uses_exact_geometry_reuse_not_quality(self):
         with tempfile.TemporaryDirectory(prefix='autowork_ablation_test_') as d:
             cells=driver.matrix(plan(),Path(d))
