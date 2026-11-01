@@ -125,20 +125,22 @@ def normalized_config(c, treatment, repo):
     return c
 
 
-def collect(repo=REPO):
+def collect(repo=REPO, manifest_rows=None, omitted=None, yaml_loader=None):
     records, provenance, incomplete, normalized = [], {}, [], {}
 
     def evidence(path):
         provenance[str(path)] = sha(path)
 
-    for group, family, root in manifests(repo):
+    if omitted is None:
+        omitted = OMITTED
+    for group, family, root in manifests(repo) if manifest_rows is None else manifest_rows:
         manifest = root / 'manifest.json'
         doc = json.loads(manifest.read_text())
         evidence(manifest)
         count = 0
         for job in doc['jobs']:
             label = job['label']
-            if label in OMITTED or (family == 'legacy' and job['orientation'] != 'legacy'):
+            if label in omitted or (family == 'legacy' and job['orientation'] != 'legacy'):
                 continue
             treatment = job.get('treatment') or ('plane' if family == 'plane' else
                 ('sphere_' if family == 'sphere' else 'ellipsoid_') + job['mode'])
@@ -160,7 +162,7 @@ def collect(repo=REPO):
             if len(good) != 1:
                 raise ValueError(f'Expected one complete attempt: {job["id"]}; got {len(good)}')
             path, means = good[0]
-            c = yaml.safe_load((path / 'training_config.yaml').read_text())['NAGConfig']
+            c = (yaml_loader or yaml.safe_load)((path / 'training_config.yaml').read_text())['NAGConfig']
             sl = c['frame_indices_filter']
             _, start, last = label.split('_')
             segment = Path(resolved_value(c['data_path'], repo)).name
@@ -310,16 +312,20 @@ def text_report(groups, records, provenance, report_date):
 
 class PDF:
     """Small vector-table writer: black text, light cells, overflow checks."""
-    def __init__(self, report_date):
+    def __init__(self, report_date, banner='PRELIMINARY - four restored-depth intervals pending',
+                 footer='PRELIMINARY', title='PRELIMINARY background results: mean and inter-frame SD',
+                 subject='405 matched trainings; restored-depth intervals not incorporated'):
         import pymupdf
         self.lib = pymupdf
         self.doc = pymupdf.open()
         self.date = report_date
+        self.banner, self.footer = banner, footer
+        self.title, self.subject = title, subject
 
     def page(self, title, subtitle=''):
         self.p = self.doc.new_page(width=842, height=595)
         self.p.draw_rect(self.lib.Rect(28, 15, 814, 37), color=None, fill=(1, .95, .78))
-        self.p.insert_text((34, 30), 'PRELIMINARY - four restored-depth intervals pending', fontsize=10, fontname='hebo')
+        self.p.insert_text((34, 30), self.banner, fontsize=10, fontname='hebo')
         self.p.insert_text((30, 62), title, fontsize=17, fontname='hebo')
         self.y = 75
         if subtitle:
@@ -369,10 +375,9 @@ class PDF:
 
     def save(self, path):
         for i, p in enumerate(self.doc):
-            p.insert_text((30, 579), f'PRELIMINARY | {self.date} | page {i+1}/{len(self.doc)}',
+            p.insert_text((30, 579), f'{self.footer} | {self.date} | page {i+1}/{len(self.doc)}',
                           fontsize=8, color=(0, 0, 0))
-        self.doc.set_metadata({'title': 'PRELIMINARY background results: mean and inter-frame SD',
-                               'subject': '405 matched trainings; restored-depth intervals not incorporated'})
+        self.doc.set_metadata({'title': self.title, 'subject': self.subject})
         self.doc.save(path, garbage=4, deflate=True)
         self.doc.close()
 
