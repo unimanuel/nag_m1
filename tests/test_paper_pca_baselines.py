@@ -7,7 +7,6 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -24,7 +23,7 @@ from nag_waymo_processing.ellipsoid import (fit_pca_enclosing_ellipsoid, WAYMO_C
 def plan():
     return dict(intervals=[dict(label=label, segment='1234567890', first=0, stop=3,
         pins={}, estimated_training_seconds=1200) for label in pca.INTERVALS],
-        recipes={'PCA': pca.RECIPE}, diagnostic_code={})
+        recipes={pca.TREATMENT: pca.RECIPE}, diagnostic_code={})
 
 
 def synthetic(root):
@@ -57,7 +56,8 @@ class PaperPCABaselineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='autowork_pca_test_') as d:
             cells = pca.matrix(plan(), Path(d))
         self.assertEqual(len(cells), 21)
-        self.assertTrue(all(c['recipe'] == 'PCA' and c['mode'] == 'regular' and c['reused_run'] is None for c in cells))
+        self.assertTrue(all(c['recipe'] == pca.TREATMENT and c['mode'] == 'regular' and c['reused_run'] is None for c in cells))
+        self.assertTrue(all('_PCA_safety_' in c['id'] for c in cells))
         for label in pca.INTERVALS:
             self.assertEqual([c['repeat'] for c in cells if c['label'] == label], [1, 2, 3])
 
@@ -71,7 +71,7 @@ class PaperPCABaselineTests(unittest.TestCase):
                 patch.object(pca, 'raw_environment', return_value={'python': 'processing'}):
             result = pca.inventory(Path('/catalog'), Path('/clouds'))
         self.assertIs(pca.driver.ABLATION_INTERVALS, old)
-        self.assertEqual(result['recipes'], {'PCA': pca.RECIPE})
+        self.assertEqual(result['recipes'], {pca.TREATMENT: pca.RECIPE})
         self.assertEqual(result['processing_environment'], {'python': 'processing'})
         self.assertTrue(all(i['pca_cloud_sha256'] == {'cloud': 'pin'} for i in result['intervals']))
         for path in (Path(pca.__file__), pca.WORKER, *(REPO / name for name in pca.LAUNCHERS)):
@@ -153,23 +153,50 @@ class PaperPCABaselineTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pca.geometry_diagnostics(wrong, item)
 
-    def test_original_outside_geometry_requires_explicit_training_acknowledgement(self):
-        cells = [dict(label='W191_40_128', geometry='/geometry.json')]
-        doc = {'baseline': {'diagnostics': {'outside_or_on_surface_camera_count': 53}}}
-        args = SimpleNamespace(intervals=None, allow_outside_cameras=False)
-        with patch.object(pca.driver, 'load', return_value=doc):
-            with self.assertRaisesRegex(ValueError, '--allow-outside-cameras'):
-                pca.acknowledge_outside_cameras(args, cells)
-            args.allow_outside_cameras = True
-            with contextlib.redirect_stdout(io.StringIO()):
-                pca.acknowledge_outside_cameras(args, cells)
-            args.allow_outside_cameras = False; args.intervals = ['W254_0_37']
-            pca.acknowledge_outside_cameras(args, cells)
+    def test_shared_safety_is_the_exact_d0_d1_d2_projection_without_reoptimization(self):
+        poses = np.repeat(np.eye(4)[None], 3, axis=0)
+        poses[:, 2, 3] = [0., 2., 4.]
+        for radii in ([2., 40., 1.], [500., 10., 3.], [30., 30., 30.]):
+            document = dict(fit=dict(mode='pca_enclosing', contains_all_points=True,
+                center=[20., -5., 10.], radii=radii, rotation_columns=np.eye(3).tolist(),
+                uniform_scale=1.2, base_half_extents=(np.asarray(radii) / 1.2).tolist(),
+                max_normalized_radius=1.))
+            before = copy.deepcopy(document)
+            original = dict(center=np.array(document['fit']['center']), radii=np.array(radii), rotation=np.eye(3))
+            expected = pca.enforce_safety(original, poses, pca.SAFETY_CONFIG)
+            with patch('reprojection_ellipsoid.minimize', side_effect=AssertionError('No optimization permitted')):
+                result, provenance = pca.shared_safety_expansion(document, poses)
+            self.assertEqual(document, before)
+            np.testing.assert_array_equal(result['fit']['radii'], expected['radii'])
+            self.assertEqual(result['fit']['center'], before['fit']['center'])
+            self.assertEqual(result['fit']['rotation_columns'], before['fit']['rotation_columns'])
+            self.assertTrue(np.all(np.asarray(result['fit']['radii']) >= radii))
+            self.assertNotIn('uniform_scale', result['fit'])
+            self.assertEqual(result['fit']['pca_original_uniform_scale'], 1.2)
+            after = provenance['after']
+            self.assertLessEqual(after['max_camera_normalized_radius'], .65 + 1e-7)
+            self.assertGreaterEqual(after['conservative_camera_clearance_m'], 6 - 1e-7)
+            self.assertGreaterEqual(after['minimum_axis_radius_m'], 8 - 1e-7)
+            self.assertLessEqual(after['maximum_axis_ratio'], 10 + 1e-7)
+            unit = np.random.default_rng(7).normal(size=(100, 3))
+            unit /= np.maximum(np.linalg.norm(unit, axis=1, keepdims=True), 1.)
+            self.assertTrue(np.all(np.linalg.norm(unit * radii / result['fit']['radii'], axis=1) <= 1. + 1e-12))
+
+    def test_shared_safety_does_not_accept_an_unsafe_projection_or_another_recipe(self):
+        poses = np.repeat(np.eye(4)[None], 3, axis=0)
+        document = dict(fit=dict(mode='pca_enclosing', contains_all_points=True,
+            center=[50., 0., 0.], radii=[2., 1., 1.], rotation_columns=np.eye(3).tolist()))
+        unchanged = dict(center=np.array([50., 0., 0.]), radii=np.array([2., 1., 1.]), rotation=np.eye(3))
+        with patch.object(pca, 'enforce_safety', return_value=unchanged), self.assertRaises(ValueError):
+            pca.shared_safety_expansion(document, poses)
+        document['fit']['mode'] = 'camera_centered_enclosing'
+        with self.assertRaises(ValueError):
+            pca.shared_safety_expansion(document, poses)
 
     def test_prepare_exports_and_validates_retry_without_training(self):
         with tempfile.TemporaryDirectory(prefix='autowork_pca_test_') as d:
             root = Path(d); cloud, item, poses, _ = synthetic(root)
-            p = dict(intervals=[item], cloud_root=str(cloud), processing_environment={}, recipes={'PCA': pca.RECIPE})
+            p = dict(intervals=[item], cloud_root=str(cloud), processing_environment={}, recipes={pca.TREATMENT: pca.RECIPE})
             target = root / 'autowork_prep'
             def execute(command, **kwargs):
                 worker.export(item, cloud, Path(command[command.index('--output') + 1]))
@@ -185,7 +212,16 @@ class PaperPCABaselineTests(unittest.TestCase):
             document = pca.driver.load(stage.result)
             self.assertFalse(document['baseline']['training_launched'])
             self.assertEqual(document['baseline']['recipe'], pca.RECIPE)
-            self.assertEqual(document['baseline']['diagnostics']['outside_or_on_surface_camera_count'], 3)
+            self.assertEqual(document['fit']['mode'], 'pca_enclosing_shared_safety')
+            self.assertEqual(document['baseline']['original_diagnostics']['outside_or_on_surface_camera_count'], 3)
+            self.assertEqual(document['baseline']['diagnostics']['outside_or_on_surface_camera_count'], 0)
+            self.assertEqual(document['baseline']['diagnostics']['missed_grid_rays'], 0)
+            original = pca.driver.load(stage.result.parent / 'pca_original.json')
+            self.assertEqual(original['fit']['mode'], 'pca_enclosing')
+            self.assertEqual(original['files']['ellipsoid_mesh_ply'], 'pca_original.ply')
+            self.assertEqual(original['fit']['center'], document['fit']['center'])
+            self.assertEqual(original['fit']['rotation_columns'], document['fit']['rotation_columns'])
+            self.assertNotEqual((stage.result.parent / 'pca_original.ply').read_bytes(), stage.result.with_suffix('.ply').read_bytes())
             self.assertEqual(len(pca.driver.load(target / 'matrix.json')['cells']), 3)
             stage.result.with_suffix('.ply').write_bytes(b'changed')
             with self.assertRaises(ValueError):
@@ -201,19 +237,22 @@ class PaperPCABaselineTests(unittest.TestCase):
             prepare.assert_not_called(); train_call.assert_not_called()
             self.assertFalse(prep.exists()); self.assertFalse(train.exists())
 
-    def test_summary_never_requires_outside_camera_acknowledgement(self):
+    def test_summary_uses_shared_safety_plan_without_an_outside_camera_bypass(self):
         with tempfile.TemporaryDirectory(prefix='autowork_pca_test_') as d:
             prep = Path(d) / 'autowork_prep'; train = Path(d) / 'autowork_train'
             with patch.object(pca, 'inventory', return_value=plan()), patch.object(pca, 'matrix', return_value=[]), \
-                    patch.object(pca, 'show'), patch.object(pca, 'acknowledge_outside_cameras') as ack, \
+                    patch.object(pca, 'show'), \
                     patch.object(pca.driver, 'train_or_summary') as summary:
                 pca.main(['train', '--summary', '--preparation-root', str(prep), '--training-root', str(train)])
-            ack.assert_not_called(); summary.assert_called_once()
+            summary.assert_called_once()
             self.assertEqual(summary.call_args.args[0].stage, 'summary')
 
     def test_cli_protects_existing_cohorts_and_rejects_bad_options(self):
         bad = [
             ['prepare', '--preparation-root', str(pca.driver.DEFAULT_PREP)],
+            ['prepare', '--preparation-root', str(pca.ORIGINAL_PREP)],
+            ['train', '--training-root', str(pca.ORIGINAL_TRAIN / 'autowork_child')],
+            ['train', '--allow-outside-cameras'],
             ['train', '--training-root', str(pca.DEFAULT_TRAIN.with_name('autowork_remaining_ego_loss_ablations_v1'))],
             ['train', '--intervals', 'W203_60_107'], ['train', '--max-hours', 'nan'],
             ['train', '--preparation-root', '/tmp/autowork_same', '--training-root', '/tmp/autowork_same'],
@@ -221,6 +260,9 @@ class PaperPCABaselineTests(unittest.TestCase):
         for args in bad:
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 pca.parse_args(args)
+        defaults = pca.parse_args(['prepare'])
+        self.assertIn('shared_safety', defaults.preparation_root.name)
+        self.assertIn('shared_safety', defaults.training_root.name)
 
     def test_batches_cover_seven_intervals_and_twenty_one_runs(self):
         labels = []
