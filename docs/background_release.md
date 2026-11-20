@@ -16,8 +16,10 @@ branch, not from earlier history. Executable analysis tools and provenance
 inputs remain under `reports/`; they are required by several launchers.
 
 Do not include unrelated local scripts, notes, monitoring output, or existing
-working-tree edits in the release commits. This cleanup does not authorize
-merging into `main`, rewriting existing history, or publishing any repository.
+working-tree edits in the release commits. The initial cleanup did not
+authorize publication. The owner separately approved publication on
+20 November 2026; that approval covers the owner's repositories, not upstream
+pushes or rewriting existing history.
 
 ## Submodules
 
@@ -29,18 +31,20 @@ commit, not the tracking branch; avoid `git submodule update --remote` when
 reproducing experiments.
 
 The Waymo submodule pins commit
-`82493a93c83ecc4e53adf4b050fd7d350a55b0dd`. Its configured repository
-`https://github.com/jp-schneider/nag-waymo-processing.git` was not accessible
-during release review, and no accessible `unimanuel/nag-waymo-processing` fork
-was available. A local checkout is not proof that a fresh GitHub clone works.
+`82493a93c83ecc4e53adf4b050fd7d350a55b0dd` in
+`https://github.com/unimanuel/nag-waymo-processing.git`, on the existing
+`feature/waymo-pointcloud-extraction` branch. The owner created this repository
+after the original upstream URL proved inaccessible. The exact pinned commit
+was published there before the parent release branch, and `.gitmodules` now
+uses that accessible URL. The existing local submodule retains the author's
+repository as `upstream`; no upstream push is part of this release.
 
-Before publication, make that exact Waymo commit available in an accessible
-repository, update `.gitmodules` if the URL changes, and test a clone without
-local URL overrides. Publishing the Waymo repository must precede publishing
-the parent pointer. Fork creation and pushing remain a separate approval step;
-the cleanup does not silently vendor the dependency or point at a nonexistent
-fork. The optional nested segmentation dependency has its own setup and is not
-needed by the point-cloud/ellipsoid unit tests.
+A fresh GitHub checkout must retrieve those exact pinned objects without
+local source repositories or URL overrides. The nested segmentation dependency
+remains pinned to `29800f32e546141409c721cd01a0f990036e4867` in
+`https://github.com/jp-schneider/sam2.git`. It has separate optional setup and
+is not needed by the point-cloud/ellipsoid unit tests, but its remote checkout
+is included in publication validation.
 
 ## Verification
 
@@ -97,7 +101,38 @@ and one historical processing-interpreter check. The saved preparation
 certificate was checked against the existing external fixture records; the
 cleanup did not rerun numerical fits or training.
 
-The Waymo remote-publication requirement above remains unresolved. These
-local results do not establish that recursive cloning from GitHub works.
-The original feature branch and `main` remain unchanged, and no branch or
-submodule has been pushed by the cleanup.
+Those initial local results did not establish that recursive cloning from
+GitHub worked. Publication received separate approval; the remote validation
+below closes that dependency-availability gap without changing the numerical
+recipe, saved geometries, or original feature branch.
+
+## GitHub publication validation
+
+The release branch was cloned directly from `unimanuel/nag_m1`, with Git's
+system/global configuration disabled and no local URL overrides, object
+alternates, or reference repositories. The parent used a partial, sparse
+source checkout omitting static media, notebooks, and run archives. Both
+submodules and the nested SAM2 submodule were initialized recursively from
+their published GitHub URLs at the exact commits listed above.
+
+Historical source blobs needed by the controlled-replay tests were fetched
+before the offline test rerun: partial clones defer those blobs, and a
+network-restricted test process cannot fetch them lazily. No test expectation,
+source code, compatibility tolerance, or dependency version was changed to
+accommodate this checkout.
+
+| Check on remote source commit `8d8a462` | Result |
+| --- | --- |
+| Repository suite | 353 passed, 3 expected integration skips |
+| Waymo point-cloud and ellipsoid suite | 15 passed |
+| Saved preparation certificate | Accepted, seven cached and seven end-to-end records |
+| Recursive dependency checkout | Waymo, tools, and nested SAM2 at their exact pins |
+
+Only this publication record is updated after that test commit; the numerical
+source, submodule pins, and compatibility signatures are unchanged.
+
+The fresh source checkout has no private `.env`, downloaded datasets, completed
+training folders, or historical processing virtual environment. Its three
+expected integration skips concern two completed-cohort checks and one
+historical-interpreter check. Verification reuses the established Python
+environments; this is not a dependency-installation or training benchmark.
