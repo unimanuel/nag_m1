@@ -25,6 +25,11 @@ WORKER_PATHS = VALIDATION_PATHS | {
     'nag/preparation/jobs.py',
     'nag/scripts/paper_final_baselines.py',
 }
+RELEASE_CLEANUP_LEDGER = REPO / 'docs/compatibility/release_cleanup_v1.json'
+RELEASE_CLEANUP_PATHS = {
+    'nag/preparation/compatibility.py',
+    'nag/scripts/make_result_comparison_video.py',
+}
 
 
 def reviewed_validation_snapshot(snapshot):
@@ -38,12 +43,25 @@ def reviewed_validation_snapshot(snapshot):
     this is not a claim of identical four- and ten-worker random streams.
     """
     from .jobs import sha
+    reviewed = dict(snapshot)
+    cleanup = json.loads(RELEASE_CLEANUP_LEDGER.read_text())
+    if cleanup.get('schema') != 1 or set(cleanup.get('files', {})) != RELEASE_CLEANUP_PATHS:
+        raise ValueError('Invalid release cleanup compatibility ledger')
+    files = cleanup['files']
+    if all(reviewed.get(p) == entry['after'] and sha(REPO / p) == snapshot.get(p)
+           for p, entry in files.items()):
+        for p, entry in files.items():
+            if entry['before'] is None:
+                reviewed.pop(p)
+            else:
+                reviewed[p] = entry['before']
     for path, expected in [(WORKER_LEDGER, WORKER_PATHS), (VALIDATION_LEDGER, VALIDATION_PATHS)]:
         ledger = json.loads(path.read_text())
         if ledger.get('schema') != 1 or set(ledger.get('files', {})) != expected:
             raise ValueError('Invalid launcher compatibility ledger')
         files = ledger['files']
-        if all(sha(REPO / p) == entry['after'] for p, entry in files.items()):
+        if all(reviewed.get(p) == entry['after'] and sha(REPO / p) == snapshot.get(p)
+               for p, entry in files.items()):
             return {p: files[p]['before'] if p in files and digest == files[p]['after'] else digest
-                    for p, digest in snapshot.items()}
-    return dict(snapshot)
+                    for p, digest in reviewed.items()}
+    return reviewed

@@ -25,7 +25,8 @@ from preparation.storage import Stage, recipe, write_json, code_signature
 from preparation.verification import (geometry_difference, compare_arrays, compare_mapping,
     release_gate, acceptance_policy, compare_fit_diagnostics)
 from preparation.compatibility import (allowed_preparation_change, PATH, OLD, NEW,
-    VALIDATION_LEDGER, WORKER_LEDGER, reviewed_validation_snapshot)
+    VALIDATION_LEDGER, WORKER_LEDGER, RELEASE_CLEANUP_LEDGER,
+    reviewed_validation_snapshot)
 from diagnostics.parallax_observations import targets_for
 import generalized_ellipsoid_preparation as cli
 from preparation import _legacy_floor_kernel as legacy_kernel
@@ -411,8 +412,9 @@ class GeneralizedPreparationTests(unittest.TestCase):
         ledger=json.loads(WORKER_LEDGER.read_text())
         raw=code_signature(validation_compatible=False)
         compatible=reviewed_validation_snapshot(raw)
+        cleanup=json.loads(RELEASE_CLEANUP_LEDGER.read_text())['files']
         for path,entry in ledger['files'].items():
-            self.assertEqual(raw[path],entry['after'])
+            self.assertEqual(raw[path],cleanup.get(path,entry)['after'])
             self.assertEqual(compatible[path],entry['before'])
         changed=copy.deepcopy(raw)
         changed['nag/model/nag_functional_model.py']='unreviewed-training-change'
@@ -423,6 +425,36 @@ class GeneralizedPreparationTests(unittest.TestCase):
         self.assertEqual(reviewed_validation_snapshot(changed)[path],'unreviewed-validator-change')
         with patch('preparation.jobs.sha',return_value='unreviewed-source-change'):
             self.assertEqual(reviewed_validation_snapshot(raw),raw)
+
+    def test_release_cleanup_aliases_only_the_exact_reviewed_video_addition(self):
+        raw=code_signature(validation_compatible=False)
+        compatible=reviewed_validation_snapshot(raw)
+        path='nag/scripts/make_result_comparison_video.py'
+        self.assertIn(path,raw)
+        self.assertNotIn(path,compatible)
+        for field in ['nag/reprojection_ellipsoid.py','nag/preparation/_legacy_floor_kernel.py',
+                      'nag/model/nag_functional_model.py']:
+            self.assertEqual(compatible[field],raw[field])
+        changed=dict(raw);changed[path]='unreviewed-video-change'
+        self.assertEqual(reviewed_validation_snapshot(changed)[path],'unreviewed-video-change')
+
+    def test_release_cleanup_does_not_hide_future_additions_or_fitting_changes(self):
+        raw=code_signature(validation_compatible=False)
+        additions={'nag/scripts/future_helper.py':'unreviewed-addition',
+                   'nag/reprojection_ellipsoid.py':'unreviewed-fitter'}
+        changed={**raw,**additions}
+        compatible=reviewed_validation_snapshot(changed)
+        for path,digest in additions.items():self.assertEqual(compatible[path],digest)
+
+    def test_release_cleanup_rejects_an_expanded_ledger(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_ledger_test_') as d:
+            path=Path(d)/'ledger.json'
+            ledger=json.loads(RELEASE_CLEANUP_LEDGER.read_text())
+            ledger['files']['nag/reprojection_ellipsoid.py']={'before':'old','after':'new'}
+            path.write_text(json.dumps(ledger))
+            with patch('preparation.compatibility.RELEASE_CLEANUP_LEDGER',path):
+                with self.assertRaisesRegex(ValueError,'cleanup compatibility ledger'):
+                    reviewed_validation_snapshot(code_signature(validation_compatible=False))
 
     def test_validation_patch_keeps_existing_stage_signature_without_rewriting_it(self):
         with tempfile.TemporaryDirectory(prefix='autowork_stage_test_') as d:

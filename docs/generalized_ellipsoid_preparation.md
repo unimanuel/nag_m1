@@ -144,6 +144,16 @@ the allowance. Raw source hashes remain available with
 certificates, preparation outputs and training manifests are not rewritten or
 relabeled as newly replayed numerical experiments.
 
+The release cleanup adds one further exact [compatibility ledger](compatibility/release_cleanup_v1.json).
+It excludes only the reviewed comparison-video exporter from historical
+preparation signatures, because this additive CLI processes saved results and
+does not participate in fitting or training. The ledger also identifies the
+exact compatibility-plumbing revision and composes with the worker ledger.
+Both physical file hashes must match. An edited exporter, an unreviewed new
+module, or changed fitting/model code remains visible and invalidates a stale
+certificate. Raw signatures retain every physical file. The historical
+certificate and numerical results are not rewritten.
+
 After the fix, rerun the original scene command with the same interval selection
 and output root. A completed first training is validated and skipped, not
 retrained. For example:

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "reason": "The comparison-video exporter is an additive postprocessing CLI, not imported by preparation, fitting, models, or training. Its exact reviewed hash is absent from historical preparation signatures. The exact compatibility-plumbing revision below composes this additive allowance with the existing worker-policy ledger. No numerical code, observation selection, recipe, geometry, checkpoint, or historical manifest is changed. Any edit to either reviewed file disables this allowance; new unrelated files remain visible in signatures.",
+  "files": {
+    "nag/preparation/compatibility.py": {
+      "before": "d7dbea8b11b9b3fa87f119664d7e89498866ad8fb69816273277c6cba7f9b8fc",
+      "after": "73d12876663c58b222e205336a6b43f8d33d0016b3fa5d40346e69b42d55b427"
+    },
+    "nag/scripts/make_result_comparison_video.py": {
+      "before": null,
+      "after": "27ca6942ffd90e7876d78e9243cb50209e9bb1ceb24f1e87a98a1b440e4a5a9c"
+    }
+  }
+}
