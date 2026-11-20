@@ -535,22 +535,43 @@ class GeneralizedPreparationTests(unittest.TestCase):
                 self.assertEqual((args.training_root/'manifest.json').read_bytes(),saved)
 
     def test_ellipsoid_four_worker_validation_cannot_reuse_archived_ten_worker_run(self):
-        root=REPO/'runs/autowork_final_ellipsoid_W324_10workers'
-        if not(root/'manifest.json').is_file():
-            root=Path('/mnt/d/CodingD/CGProjectD/nagRunsFromC/autowork_final_ellipsoid_W324_10workers')
-        if not(root/'manifest.json').is_file():self.skipTest('Archived W324 cohort not available')
-        old=json.loads((root/'manifest.json').read_text())['jobs'][0]
-        source=root/old['id']/'attempt_001'
-        four={**old,'id':old['id']+'_workers4','num_workers':4}
-        with self.assertRaises(ValueError):cli.training_completed(source,four)
-        original=cli.settings
-        def effective(path):
-            c=original(path)
-            if Path(path)==source/'training_config.yaml':
-                c['name']=four['id'];c['num_workers']=4
-            return c
-        with patch.object(cli,'settings',side_effect=effective):
-            self.assertIsNotNone(cli.training_completed(source,four))
+        # Worker validation must not depend on a moved, machine-local archive.
+        # Supply matching dataset/calibration/geometry fixtures so the negative
+        # assertion specifically tests workers, rather than an unrelated path.
+        with tempfile.TemporaryDirectory(prefix='autowork_worker_cohort_test_') as d:
+            base=Path(d);root=dataset(base);regular,_=configs(base,root)
+            reference=cli.settings(regular)
+            reference.update(num_workers=10,training_phases=[],
+                plane_init_strategy_kwargs={},object_position_spline_approximation=False)
+            regular.write_text(yaml.safe_dump({'NAGConfig':reference}))
+            geometry=base/'ellipsoid.json'
+            geometry.write_text(json.dumps({'fit':{'center':[0.,0.,0.],
+                'radii':[30.,20.,10.],'rotation_columns':np.eye(3).tolist()}}))
+            source=base/'attempt_001';source.mkdir()
+            four={'id':'matched_workers4','num_workers':4,'frame_count':3,
+                'config':str(regular),'data_dir':str(root),'size':(16,12),
+                'pose_path':str(root/'waymo_pose_config_no_distortion.json'),
+                'geometry':str(geometry)}
+            effective=copy.deepcopy(reference)
+            effective.update(name=four['id'],background_plane_type=cli.ELLIPSOID_TYPE,
+                background_ellipsoid_path=str(geometry),background_ellipsoid_scale_margin=0.,
+                background_ellipsoid_texture_orientation='legacy',object_rigid_control_points=3,
+                used_runner_type='nag.run.nag_runner.NAGRunner',
+                pinhole_camera_config=json.loads(Path(four['pose_path']).read_text()))
+            effective['plane_init_strategy_kwargs']['position_spline_fitting']=False
+            effective.update({field:str(root/suffix)for field,suffix in cli.DATA_FIELDS.items()})
+            effective['mask_ids_filter_path']=None
+            saved=source/'training_config.yaml'
+            saved.write_text(yaml.safe_dump({'NAGConfig':effective}))
+            diagnostic={'center':[0.,0.,0.],'effective_radii':[30.,20.,10.],
+                        'rotation_columns':np.eye(3).tolist()}
+            with patch('paper_plane_baselines.basic_completed',return_value={}), \
+                    patch('diagnostics.parallax_io.diagnostic',return_value=diagnostic):
+                with self.assertRaisesRegex(ValueError,'setting: num_workers'):
+                    cli.training_completed(source,four)
+                effective['num_workers']=4
+                saved.write_text(yaml.safe_dump({'NAGConfig':effective}))
+                self.assertIsNotNone(cli.training_completed(source,four))
 
     def test_cloud_lookup_uses_full_segment_and_training_list_index(self):
         jobs=discover(config_paths=[REPO/'config/waymo/autowork_paper-final/segment-12511696717465549299_0_40_large-undistorted.yaml'])

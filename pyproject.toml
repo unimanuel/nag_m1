@@ -42,6 +42,14 @@ ipyevents = "^2.0.2"
 ipympl = "^0.9.7"
 mpl-interactions = {extras = ["jupyter"], version = "^0.24.2"}
 
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = ">=8.3,<9"
+pymupdf = ">=1.24.14,<1.27"
+reportlab = ">=4.2,<5"
+
 [tool.poetry.extras]
 depth = ["transformers"]
 torch = ["torch", "torchaudio", "torchvision"]
