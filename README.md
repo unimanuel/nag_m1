@@ -111,6 +111,15 @@ python nag/scripts/run_nag.py --config-path [path-to-config]
 Waymo PCA ellipsoid backgrounds and the scene-115 training commands are
 documented in [docs/ellipsoid_background.md](docs/ellipsoid_background.md).
 
+The sphere/ellipsoid background extension also provides Visible-UV textures,
+YAML-driven three-stage ellipsoid preparation, matched experiment queues, and
+saved-result diagnostics. The current preparation recipe is documented in
+[the generalized preparation guide](docs/generalized_ellipsoid_preparation.md);
+the earlier PCA milestone commands above remain historical baselines.
+See [testing](docs/testing.md) and [release review](docs/background_release.md)
+for validation and submodule-publication prerequisites. Generated report drafts,
+presentations, and result PDFs are not part of the source release.
+
 For more details, please refer to the [training instructions](docs/training.md).
 
 During the training process and afterwards, the model is evaluated to produce outputs for all frames, calculating metrics, as well as scene decompositions for every object.
