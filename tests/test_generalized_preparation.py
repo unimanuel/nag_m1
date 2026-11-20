@@ -25,7 +25,7 @@ from preparation.storage import Stage, recipe, write_json, code_signature
 from preparation.verification import (geometry_difference, compare_arrays, compare_mapping,
     release_gate, acceptance_policy, compare_fit_diagnostics)
 from preparation.compatibility import (allowed_preparation_change, PATH, OLD, NEW,
-    VALIDATION_LEDGER, WORKER_LEDGER, RELEASE_CLEANUP_LEDGER,
+    VALIDATION_LEDGER, WORKER_LEDGER, RELEASE_CLEANUP_LEDGER, LINE_ENDING_LEDGER,
     reviewed_validation_snapshot)
 from diagnostics.parallax_observations import targets_for
 import generalized_ellipsoid_preparation as cli
@@ -434,7 +434,8 @@ class GeneralizedPreparationTests(unittest.TestCase):
         self.assertNotIn(path,compatible)
         for field in ['nag/reprojection_ellipsoid.py','nag/preparation/_legacy_floor_kernel.py',
                       'nag/model/nag_functional_model.py']:
-            self.assertEqual(compatible[field],raw[field])
+            endings=json.loads(LINE_ENDING_LEDGER.read_text())['files']
+            self.assertEqual(compatible[field],endings.get(field,{}).get('before',raw[field]))
         changed=dict(raw);changed[path]='unreviewed-video-change'
         self.assertEqual(reviewed_validation_snapshot(changed)[path],'unreviewed-video-change')
 
@@ -454,6 +455,41 @@ class GeneralizedPreparationTests(unittest.TestCase):
             path.write_text(json.dumps(ledger))
             with patch('preparation.compatibility.RELEASE_CLEANUP_LEDGER',path):
                 with self.assertRaisesRegex(ValueError,'cleanup compatibility ledger'):
+                    reviewed_validation_snapshot(code_signature(validation_compatible=False))
+
+    def test_line_ending_aliases_reconstruct_the_exact_historical_bytes(self):
+        files=json.loads(LINE_ENDING_LEDGER.read_text())['files']
+        self.assertEqual(len(files),14)
+        for path,entry in files.items():
+            raw=(REPO/path).read_bytes();normalized=raw.replace(b'\r\n',b'\n')
+            self.assertEqual(hashlib.sha256(normalized).hexdigest(),entry['after'],path)
+            lines=normalized.splitlines(keepends=True);seen=set()
+            for first,last in entry['historical_crlf_ranges']:
+                self.assertLessEqual(first,last)
+                for index in range(first-1,last):
+                    self.assertNotIn(index,seen);seen.add(index)
+                    self.assertTrue(lines[index].endswith(b'\n'))
+                    lines[index]=lines[index][:-1]+b'\r\n'
+            self.assertEqual(hashlib.sha256(b''.join(lines)).hexdigest(),entry['before'],path)
+
+    def test_both_reviewed_line_endings_have_the_same_compatible_signature(self):
+        raw=code_signature(validation_compatible=False)
+        expected=reviewed_validation_snapshot(raw)
+        files=json.loads(LINE_ENDING_LEDGER.read_text())['files']
+        for style in ['before','after']:
+            snapshot={**raw,**{path:entry[style]for path,entry in files.items()}}
+            with patch('preparation.jobs.sha',side_effect=lambda p:snapshot[str(p.relative_to(REPO))]):
+                self.assertEqual(reviewed_validation_snapshot(snapshot),expected)
+        changed=dict(raw);path=next(iter(files));changed[path]='substantive-code-edit'
+        self.assertEqual(reviewed_validation_snapshot(changed)[path],'substantive-code-edit')
+
+    def test_line_ending_ledger_cannot_waive_an_extra_module(self):
+        with tempfile.TemporaryDirectory(prefix='autowork_endings_test_') as d:
+            path=Path(d)/'ledger.json';ledger=json.loads(LINE_ENDING_LEDGER.read_text())
+            ledger['files']['nag/reprojection_ellipsoid.py']={'before':'old','after':'new'}
+            path.write_text(json.dumps(ledger))
+            with patch('preparation.compatibility.LINE_ENDING_LEDGER',path):
+                with self.assertRaisesRegex(ValueError,'line-ending compatibility ledger'):
                     reviewed_validation_snapshot(code_signature(validation_compatible=False))
 
     def test_validation_patch_keeps_existing_stage_signature_without_rewriting_it(self):

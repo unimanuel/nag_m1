@@ -30,6 +30,23 @@ RELEASE_CLEANUP_PATHS = {
     'nag/preparation/compatibility.py',
     'nag/scripts/make_result_comparison_video.py',
 }
+LINE_ENDING_LEDGER = REPO / 'docs/compatibility/historical_line_endings_v1.json'
+LINE_ENDING_PATHS = {
+    'nag/callbacks/nag_callback.py',
+    'nag/dataset/nag_dataset.py',
+    'nag/model/background_image_plane_scene_node_3d.py',
+    'nag/model/background_image_sphere_scene_node_3d.py',
+    'nag/model/learned_image_plane_scene_node_3d.py',
+    'nag/model/nag_functional_model.py',
+    'nag/model/nag_model.py',
+    'nag/model/sphere_utils.py',
+    'nag/model/view_dependent_background_image_plane_scene_node_3d.py',
+    'nag/model/view_dependent_background_image_sphere_scene_node_3d.py',
+    'nag/model/view_dependent_image_plane_scene_node_3d.py',
+    'nag/run/nag_runner.py',
+    'nag/strategy/in_image_plane_position_strategy.py',
+    'nag/strategy/plane_position_strategy.py',
+}
 
 
 def reviewed_validation_snapshot(snapshot):
@@ -55,6 +72,13 @@ def reviewed_validation_snapshot(snapshot):
                 reviewed.pop(p)
             else:
                 reviewed[p] = entry['before']
+    line_endings = json.loads(LINE_ENDING_LEDGER.read_text())
+    if line_endings.get('schema') != 1 or set(line_endings.get('files', {})) != LINE_ENDING_PATHS:
+        raise ValueError('Invalid historical line-ending compatibility ledger')
+    files = line_endings['files']
+    if all(reviewed.get(p) in (entry['before'], entry['after']) and
+           sha(REPO / p) == snapshot.get(p) for p, entry in files.items()):
+        reviewed.update({p: entry['before'] for p, entry in files.items()})
     for path, expected in [(WORKER_LEDGER, WORKER_PATHS), (VALIDATION_LEDGER, VALIDATION_PATHS)]:
         ledger = json.loads(path.read_text())
         if ledger.get('schema') != 1 or set(ledger.get('files', {})) != expected:

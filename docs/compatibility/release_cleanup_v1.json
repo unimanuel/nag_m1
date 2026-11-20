@@ -4,7 +4,7 @@
   "files": {
     "nag/preparation/compatibility.py": {
       "before": "d7dbea8b11b9b3fa87f119664d7e89498866ad8fb69816273277c6cba7f9b8fc",
-      "after": "73d12876663c58b222e205336a6b43f8d33d0016b3fa5d40346e69b42d55b427"
+      "after": "22232b308fe17229747ca2f02e16f837ef38762fe0621494262f608c4d815193"
     },
     "nag/scripts/make_result_comparison_video.py": {
       "before": null,

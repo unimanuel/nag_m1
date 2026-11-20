@@ -154,6 +154,16 @@ module, or changed fitting/model code remains visible and invalidates a stale
 certificate. Raw signatures retain every physical file. The historical
 certificate and numerical results are not rewritten.
 
+Fresh Git checkouts also use LF-only versions of 14 older source files whose
+historical WSL worktree contained mixed CRLF/LF endings. The exact
+[line-ending ledger](compatibility/historical_line_endings_v1.json) records both
+SHA-256 identities and the historical CRLF line ranges. Tests reconstruct the
+historical bytes from each LF source and require the recorded hash, proving
+that only line endings differ. Only the fixed file list and those exact
+identities are compatible; arbitrary normalization or substantive edits are
+not accepted. No historical file or certificate is rewritten, and raw
+signatures continue to describe the actual checkout bytes.
+
 After the fix, rerun the original scene command with the same interval selection
 and output root. A completed first training is validated and skipped, not
 retrained. For example:

@@ -1,0 +1,486 @@
+{
+  "schema": 1,
+  "reason": "Exact historical mixed-line-ending source bytes versus their Git-normalized LF blobs. Reconstructing only the recorded CRLF lines from the LF blob must reproduce the historical SHA-256. No source token, numerical recipe, training behavior, or fitting code changes are allowed. Both known identities are accepted only for the fixed file set; future edits remain detectable.",
+  "files": {
+    "nag/callbacks/nag_callback.py": {
+      "before": "1cbbfcd52476e2dd4c5a661d97cef534de238be01b7103be63c1f2ce48326f02",
+      "after": "31c98b2c8404f0956d30c1f7b06337c9e153bf648af84dcd53fd105a92a4b152",
+      "historical_crlf_ranges": [
+        [
+          6,
+          47
+        ],
+        [
+          53,
+          58
+        ],
+        [
+          65,
+          68
+        ],
+        [
+          73,
+          79
+        ],
+        [
+          94,
+          116
+        ],
+        [
+          118,
+          143
+        ],
+        [
+          152,
+          1018
+        ],
+        [
+          1024,
+          1025
+        ],
+        [
+          1119,
+          1601
+        ],
+        [
+          1607,
+          2072
+        ]
+      ]
+    },
+    "nag/dataset/nag_dataset.py": {
+      "before": "bf2e3838bdd64b3d21ed5593f18ce6e58abdb8a800ec4c7de459248bf24e3e02",
+      "after": "29f6bd161bc76187bba4235b1f53b88bfaf007cc976c5a6026049edd6f7fb745",
+      "historical_crlf_ranges": [
+        [
+          1,
+          948
+        ]
+      ]
+    },
+    "nag/model/background_image_plane_scene_node_3d.py": {
+      "before": "0fbc2665d1504e5ab8afccefe9a6fc7a202a85b82e35cd4d0a3ce55660c44a52",
+      "after": "9c9d733c5a8146dd8e64f8d5e4d1d465d96c3fd14017d63cca8031586ac4ad80",
+      "historical_crlf_ranges": [
+        [
+          1,
+          665
+        ],
+        [
+          667,
+          672
+        ],
+        [
+          687,
+          970
+        ],
+        [
+          984,
+          992
+        ],
+        [
+          999,
+          999
+        ],
+        [
+          1014,
+          1126
+        ],
+        [
+          1131,
+          1220
+        ]
+      ]
+    },
+    "nag/model/background_image_sphere_scene_node_3d.py": {
+      "before": "98a710dedd1e382364db1c4bcff6aec2735310309ea9c7690ace47044f3a3271",
+      "after": "e6a985dd494f0080072db1d39dc7e2e15a891f04675637252826b70a97e3f30f",
+      "historical_crlf_ranges": [
+        [
+          1,
+          16
+        ],
+        [
+          19,
+          30
+        ],
+        [
+          60,
+          61
+        ],
+        [
+          67,
+          67
+        ],
+        [
+          79,
+          86
+        ],
+        [
+          129,
+          129
+        ],
+        [
+          234,
+          293
+        ],
+        [
+          298,
+          307
+        ],
+        [
+          482,
+          483
+        ],
+        [
+          485,
+          492
+        ],
+        [
+          498,
+          503
+        ],
+        [
+          516,
+          520
+        ],
+        [
+          524,
+          532
+        ],
+        [
+          534,
+          727
+        ],
+        [
+          737,
+          770
+        ],
+        [
+          885,
+          890
+        ],
+        [
+          897,
+          920
+        ],
+        [
+          931,
+          948
+        ]
+      ]
+    },
+    "nag/model/learned_image_plane_scene_node_3d.py": {
+      "before": "ba8d4ee2992ac52f5f22ceccdb6b52f52b6a88c5bf20c18280c8851b6b54901a",
+      "after": "5e2dc0337de015f3427ed3466b724827a7862edb7c99a05e02dcb8c0972b3f00",
+      "historical_crlf_ranges": [
+        [
+          1,
+          1453
+        ]
+      ]
+    },
+    "nag/model/nag_functional_model.py": {
+      "before": "a7e95e839f0173fbcaff02ae31bccfc669be1cbe1a715ccdc2fef73a065579bd",
+      "after": "084a66ba50e7937cd675fbc9e1865d0a90c2dfa7d922273f44c895dfc8a65581",
+      "historical_crlf_ranges": [
+        [
+          1,
+          35
+        ],
+        [
+          43,
+          726
+        ],
+        [
+          728,
+          729
+        ],
+        [
+          732,
+          735
+        ],
+        [
+          749,
+          760
+        ],
+        [
+          765,
+          781
+        ],
+        [
+          808,
+          879
+        ],
+        [
+          911,
+          1381
+        ],
+        [
+          1392,
+          1435
+        ],
+        [
+          1437,
+          1438
+        ],
+        [
+          1440,
+          1531
+        ],
+        [
+          1542,
+          1572
+        ],
+        [
+          1575,
+          1586
+        ],
+        [
+          1589,
+          1589
+        ],
+        [
+          1591,
+          1630
+        ],
+        [
+          1633,
+          1633
+        ],
+        [
+          1635,
+          1658
+        ],
+        [
+          1664,
+          1664
+        ],
+        [
+          1666,
+          1666
+        ],
+        [
+          1668,
+          1671
+        ],
+        [
+          1673,
+          1683
+        ],
+        [
+          1685,
+          1685
+        ],
+        [
+          1687,
+          1696
+        ],
+        [
+          1700,
+          1700
+        ],
+        [
+          1703,
+          1703
+        ],
+        [
+          1705,
+          2643
+        ]
+      ]
+    },
+    "nag/model/nag_model.py": {
+      "before": "c99aa52cd4ddaf943bc02e53c8fc25e2c90196a8be3f064800de79e03756c82e",
+      "after": "22a3026f4f8459e64b4ff95f4e936e3d2abc9705b522b2f77c8f1025fbe8a9e2",
+      "historical_crlf_ranges": [
+        [
+          1,
+          29
+        ],
+        [
+          31,
+          216
+        ],
+        [
+          218,
+          219
+        ],
+        [
+          226,
+          226
+        ],
+        [
+          228,
+          1478
+        ]
+      ]
+    },
+    "nag/model/sphere_utils.py": {
+      "before": "19ac7a64f555a1b8b0ae84b84ebd724d0626ea3e75d2fe48753a2507e234ed33",
+      "after": "f81dc396bbf987596c539accb64a1dc8211cb98bacbe595bb2e3c53fb158fcfb",
+      "historical_crlf_ranges": [
+        [
+          1,
+          124
+        ],
+        [
+          126,
+          169
+        ]
+      ]
+    },
+    "nag/model/view_dependent_background_image_plane_scene_node_3d.py": {
+      "before": "0845542a4246a0c24b3d1e1ad92db4b9300c2580e4be00e97eb337c73656965e",
+      "after": "aa0a6ce47d95d3e7aa7796585a31e4036b1d057d137f8a5bc09fcffc488ee62e",
+      "historical_crlf_ranges": [
+        [
+          1,
+          269
+        ],
+        [
+          271,
+          277
+        ],
+        [
+          293,
+          472
+        ]
+      ]
+    },
+    "nag/model/view_dependent_background_image_sphere_scene_node_3d.py": {
+      "before": "65c31b10c9cd62e25e5f0ce78b7a4c306761b255621ce83fc490a7bd6523e635",
+      "after": "c22823ef10310131259009e3f0877dcf5320dcc1168d3fed24b80569c2d2522f",
+      "historical_crlf_ranges": [
+        [
+          1,
+          20
+        ],
+        [
+          23,
+          37
+        ],
+        [
+          39,
+          42
+        ],
+        [
+          45,
+          45
+        ],
+        [
+          57,
+          62
+        ],
+        [
+          111,
+          111
+        ],
+        [
+          208,
+          409
+        ],
+        [
+          417,
+          437
+        ]
+      ]
+    },
+    "nag/model/view_dependent_image_plane_scene_node_3d.py": {
+      "before": "3f29721190bbce3f20121b0bfca02268524ed8528cb3c63ab65b1990374a80fe",
+      "after": "392f4e677c69cec59184dc32fdbfc94927c7a275f569dfbdb75f6aed48574038",
+      "historical_crlf_ranges": [
+        [
+          1,
+          595
+        ]
+      ]
+    },
+    "nag/run/nag_runner.py": {
+      "before": "fef766733e5c877ab114a4bf5510454056af362ea30b86c1b7ad5e73b5323029",
+      "after": "80552b5b81199b3cd4587679475cd9f4a6661d44d32c7edd448776d0843996e8",
+      "historical_crlf_ranges": [
+        [
+          1,
+          494
+        ],
+        [
+          499,
+          519
+        ],
+        [
+          1051,
+          1066
+        ],
+        [
+          1126,
+          1132
+        ],
+        [
+          1183,
+          1361
+        ],
+        [
+          1442,
+          1516
+        ],
+        [
+          1564,
+          1787
+        ]
+      ]
+    },
+    "nag/strategy/in_image_plane_position_strategy.py": {
+      "before": "83a32f658b918e40d0d8a1a9f925e065ab8189a7e0c3cbc1b9a54575ec22bb0c",
+      "after": "dfd8958637727ad43f2b1420a4b1a20d016d4c9903360ddf3e42cf8f1e8f480d",
+      "historical_crlf_ranges": [
+        [
+          1,
+          846
+        ],
+        [
+          850,
+          857
+        ],
+        [
+          859,
+          877
+        ],
+        [
+          899,
+          920
+        ],
+        [
+          927,
+          947
+        ],
+        [
+          951,
+          957
+        ],
+        [
+          961,
+          963
+        ],
+        [
+          978,
+          995
+        ],
+        [
+          1020,
+          2202
+        ]
+      ]
+    },
+    "nag/strategy/plane_position_strategy.py": {
+      "before": "03fbd5285a6bf3e7df19e8b7eef814e8cacd0fa98bba58ceac2fa5d4eb743f4b",
+      "after": "94a28528935030cd1a479722c8a7913bf8c77c385e797a556a2a909e631e3fbb",
+      "historical_crlf_ranges": [
+        [
+          1,
+          1129
+        ]
+      ]
+    }
+  }
+}

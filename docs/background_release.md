@@ -63,6 +63,11 @@ non-numerical changes; they do not waive future fitting, model, or observation
 changes. The comparison-video allowance preserves the old certificate and
 manifests without pretending a numerical replay was rerun.
 
+The fixed, hash-backed historical line-ending ledger also permits Git's
+LF-only checkout of 14 older mixed-ending source files. Its tests reconstruct
+the exact historical bytes from the recorded CRLF ranges. This is not a
+general training-code exemption or an on-disk source rewrite.
+
 A temporary local clone can verify the committed tree and submodule objects
 using local source repositories. Such a test must be labeled local-only: it
 cannot discharge the separate remote-publication check above.
