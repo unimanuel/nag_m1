@@ -42,6 +42,10 @@ The generalized-preparation worker regression uses a temporary dataset,
 calibration, and ellipsoid fixture. A moved archive or unavailable training
 folder must not change whether that worker check passes.
 
+Download-ID tests use job descriptors and the versioned training list directly;
+they need neither downloaded images nor a machine-local `.env`. Dataset
+discovery itself is tested with temporary images and calibration files.
+
 The saved seven-interval preparation certificate is a separate regression
 record. Unit tests do not replace it. Its production release gate must accept
 the current code identities, recipe, fixture hash, and numerical policy before

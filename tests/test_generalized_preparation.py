@@ -606,10 +606,27 @@ class GeneralizedPreparationTests(unittest.TestCase):
                 self.assertIsNotNone(cli.training_completed(source,four))
 
     def test_cloud_lookup_uses_full_segment_and_training_list_index(self):
-        jobs=discover(config_paths=[REPO/'config/waymo/autowork_paper-final/segment-12511696717465549299_0_40_large-undistorted.yaml'])
-        commands=cli.cloud_commands(jobs,Path('/tmp/raw'),Path('/tmp/cloud'))
+        # Resolving a download ID does not require local images, calibration,
+        # or a developer's .env. Discovery is covered by the dataset fixtures.
+        job=PreparationJob('12511696717465549299',0,41,1,'/unavailable/dataset',
+            '/unavailable/pose.json','/unavailable/raw_pose.json',(1920,1280),
+            (960,640),'','',())
+        commands=cli.cloud_commands([job],Path('/tmp/raw'),Path('/tmp/cloud'))
         self.assertEqual(commands[0][commands[0].index('--scene-ids')+1],'115')
         self.assertEqual(len(commands),2)
+
+    def test_cloud_lookup_rejects_prefix_only_and_ambiguous_training_entries(self):
+        job=PreparationJob('12511696717465549299',0,41,1,'','','',(32,24),(16,12),'','',())
+        with tempfile.TemporaryDirectory(prefix='autowork_cloud_list_test_') as d:
+            root=Path(d);path=root/'libs/nag-waymo-processing/data/waymo_train_list.txt'
+            path.parent.mkdir(parents=True)
+            with patch.object(cli,'REPO',root):
+                path.write_text('segment-125116967174655492990_different\n')
+                with self.assertRaisesRegex(ValueError,'unique exact training-list match'):
+                    cli.cloud_commands([job],root/'raw',root/'cloud')
+                path.write_text(('segment-12511696717465549299_same\n')*2)
+                with self.assertRaisesRegex(ValueError,'unique exact training-list match'):
+                    cli.cloud_commands([job],root/'raw',root/'cloud')
 
     def test_cli_dry_reference_and_audit_never_write_or_initialize(self):
         with tempfile.TemporaryDirectory(prefix='autowork_cli_test_') as d:
