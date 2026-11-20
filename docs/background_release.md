@@ -74,3 +74,30 @@ cannot discharge the separate remote-publication check above.
 
 After review and publication approval, integrate the approved branch into the
 fork's `main` and push only to `unimanuel/nag_m1`, not to the upstream project.
+
+## Local validation results
+
+The cleanup was validated on 20 November 2026 in the existing NAG environment,
+with optional PDF-test packages supplied from an isolated temporary directory.
+The training and raw-v4 environments were not upgraded.
+
+| Check | Result |
+| --- | --- |
+| Complete repository suite in the research checkout | 356 passed |
+| Separate local source checkout with locally supplied submodules | 353 passed, 3 expected integration skips |
+| Waymo point-cloud and ellipsoid tests | 15 passed |
+| Saved preparation certificate in both checkout forms | Accepted, seven cached and seven end-to-end records |
+| Source whitespace and changed shell-script syntax | Passed |
+| Generated-artifact archive | 18 exact copies verified before removal |
+
+The local source checkout omitted upstream static media and notebooks, and did
+not contain the private `.env`, datasets, run archives, or submodule virtual
+environment. Its three skips concern two completed-cohort integration checks
+and one historical processing-interpreter check. The saved preparation
+certificate was checked against the existing external fixture records; the
+cleanup did not rerun numerical fits or training.
+
+The Waymo remote-publication requirement above remains unresolved. These
+local results do not establish that recursive cloning from GitHub works.
+The original feature branch and `main` remain unchanged, and no branch or
+submodule has been pushed by the cleanup.
