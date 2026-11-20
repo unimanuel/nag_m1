@@ -232,3 +232,10 @@ runs
 log/*
 !data/static/
 .vscode/settings.json
+
+# Generated report deliverables belong outside the source repository.
+/reports/*.pdf
+/reports/*.docx
+/reports/*.pptx
+/reports/*_preview.png
+/reports/*_preview.jpg
